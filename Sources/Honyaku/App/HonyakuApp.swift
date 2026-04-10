@@ -100,7 +100,7 @@ struct HonyakuApp: App {
             pipeline = p
             hotkeyService.onRecordingStarted = { p.startRecording() }
             hotkeyService.onRecordingEnded   = { p.stopRecordingAndProcess() }
-            hotkeyService.setPipelineBusyCheck { appState.status != .idle }
+            hotkeyService.setPipelineBusyCheck { appState.status.isBusy }
         }
 
         // Attempt to start the hotkey tap — retry on every popover open in case

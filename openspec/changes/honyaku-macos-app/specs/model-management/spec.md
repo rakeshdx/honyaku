@@ -38,9 +38,9 @@ The system SHALL allow the user to switch their active speech model in Settings 
 ### Requirement: Cleanup model can be changed after setup
 The system SHALL allow the user to switch their active cleanup model in Settings at any time, with the same download flow as speech model switching.
 
-#### Scenario: User switches to the Quality cleanup tier
-- **WHEN** the user selects the Qwen 3.5 4B model in Settings
-- **THEN** the system downloads the model (showing size warning for 2.8 GB) and begins using it for cleanup after download completes
+#### Scenario: User switches to the Best cleanup tier
+- **WHEN** the user selects the Qwen 2.5 7B MLX model in Settings
+- **THEN** the system downloads the model (showing size warning for 4.3 GB) and begins using it for cleanup after download completes
 
 ---
 
@@ -118,10 +118,10 @@ SpeakerKit's CoreML models originate from Hugging Face repositories that may req
 
 ---
 
-### Requirement: Custom GGUF model path is out of scope for v1
-Loading user-supplied or third-party GGUF model files from arbitrary paths is explicitly NOT supported in v1. The system SHALL only load cleanup LLM models from the curated model registry. This constraint MAY be relaxed in a future version with appropriate format validation and security review.
+### Requirement: Custom model paths are out of scope for v1
+Loading user-supplied or third-party model files from arbitrary paths is explicitly NOT supported in v1. The system SHALL only load cleanup LLM models from the curated model registry (MLX-format safetensors from mlx-community). This constraint MAY be relaxed in a future version with appropriate format validation and security review.
 
-#### Scenario: User attempts to load a custom GGUF file
+#### Scenario: User attempts to load a custom model file
 - **WHEN** a user asks to load a model file from outside the managed model storage
 - **THEN** the app does not provide this capability in v1; only registry-managed models are available
 

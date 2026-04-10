@@ -69,7 +69,11 @@ final class HotkeyService: HotkeyServiceProtocol {
                                 flags.contains(.maskShift)
 
         if controlDown && !hasOtherModifiers {
-            // Control pressed — start recording if not already started
+            // Control pressed — start recording if not already started.
+            // Treat a stale keyDownTime (>5s) as orphaned from a missed keyup and reset it.
+            if let t = keyDownTime, Date().timeIntervalSince(t) > 5 {
+                keyDownTime = nil
+            }
             guard keyDownTime == nil else {
                 return nil  // suppress repeat
             }

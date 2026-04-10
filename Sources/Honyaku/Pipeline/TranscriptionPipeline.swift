@@ -22,7 +22,9 @@ final class TranscriptionPipeline {
     // MARK: - Recording lifecycle
 
     func startRecording() {
-        guard appState.status.isIdle else { return }
+        guard !appState.status.isBusy else { return }
+        // Clear any prior error so Control key works again after a failed pipeline run
+        appState.clearError()
         do {
             try audioCapture.startCapture()
             appState.status = .recording
@@ -96,11 +98,10 @@ final class TranscriptionPipeline {
             do {
                 let cleaned = try await cleanup.clean(labeledText, prompt: cleanupPrompt)
                 let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-                let activeModelID = UserDefaults.standard.string(forKey: "selectedCleanupModelID") ?? ModelRegistry.defaultCleanupModelID
-                finalText = trimmed.isEmpty ? labeledText : "[Clean: \(activeModelID)] \(trimmed)"
+                finalText = trimmed.isEmpty ? labeledText : trimmed
             } catch {
                 // Timeout, model not loaded, or any other error — fall back to labeled text
-                finalText = "[CleanupFailed: \(error)] \(labeledText)"
+                finalText = labeledText
             }
         }
 

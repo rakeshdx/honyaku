@@ -14,7 +14,7 @@ Target platform: macOS 14.0+, Apple Silicon (M1+).
 - Native SwiftUI menu bar app with zero Dock presence
 - Push-to-talk via global Control key hotkey using Accessibility API
 - Local ASR via WhisperKit (Whisper family models served from Hugging Face)
-- Local LLM cleanup via LLM.swift (Qwen / similar small models)
+- Local LLM cleanup via MLXLLM (Qwen 2.5 MLX 4-bit models)
 - Speaker diarization via pyannote-audio models (bundled or CoreML-converted)
 - First-run setup wizard for model selection and permission onboarding
 - All transcript history and recordings stored locally only
@@ -44,15 +44,15 @@ WhisperKit is a first-class Swift package optimised for Apple Silicon via CoreML
 
 ---
 
-### D2 — LLM Cleanup: LLM.swift over MLX-LM or llama.cpp
+### D2 — LLM Cleanup: MLXLLM (ml-explore/mlx-swift-lm) over LLM.swift or llama.cpp
 
-**Chosen**: LLM.swift (Swift, Metal, GGUF)
+**Chosen**: MLXLLM / MLXLMCommon (ml-explore/mlx-swift-lm v2.30.6, Swift, Metal/ANE, safetensors)
 
-LLM.swift loads GGUF models directly in Swift with Metal acceleration. It has a small API surface, handles prompt templating, and supports the Qwen 3.5 series that ghost-pepper validates in production.
+MLXLLM loads MLX-format safetensors models directly in Swift with Metal/ANE acceleration. It ships as a clean SPM package with no external framework or xcframework required, eliminating code-signing issues. Models are downloaded as a directory of safetensors files from mlx-community on Hugging Face. The `ChatSession` API provides a simple synchronous-style interface for single-turn cleanup passes.
 
 *Alternatives considered:*
-- `mlx-swift` — Apple-native MLX inference; architecturally cleaner but fewer supported model formats and less community tooling
-- `llama.cpp` Swift bindings — viable but requires bridging layer and manual build; LLM.swift wraps this more ergonomically
+- `LLM.swift` (GGUF/llama.cpp wrapper) — originally chosen; rejected due to xcframework code-signing failures, `package` access-level build errors, and llama.framework symlink corruption on macOS. The precompiled xcframework required manual reconstruction to pass Gatekeeper.
+- `llama.cpp` Swift bindings — same signing and build complexity as LLM.swift without the ergonomic wrapper
 
 ---
 
@@ -113,6 +113,225 @@ A single `AppDelegate`-free entry point using `@main`. The menu bar extra is dri
 
 ---
 
+## Architecture Diagram
+
+### Recording pipeline (happy path)
+
+```
+ User holds ⌃ Control
+        │
+        ▼
+┌───────────────────┐
+│   HotkeyService   │  CGEventTap on .flagsChanged
+│  (CGEventTap)     │  Filters bare Control; ignores chords (⌃⌘, ⌃⇧…)
+└────────┬──────────┘  300 ms minimum hold enforced
+         │ onRecordingStarted / onRecordingEnded
+         ▼
+┌───────────────────────────────────────────┐
+│          TranscriptionPipeline            │  @MainActor orchestrator
+│                                           │  Updates AppState.status throughout
+└──┬───────────────────────────────────────┘
+   │
+   │  1. start capture
+   ▼
+┌───────────────────┐
+│ AudioCaptureService│  AVAudioEngine + AVAudioInputNode tap
+│  (AVAudioEngine)  │  Buffers PCM in memory; mic held only while recording
+└────────┬──────────┘
+         │ WAV file + mono 16 kHz float array (on key release)
+         ▼
+┌───────────────────┐
+│TranscriptionService│  WhisperKit (CoreML / ANE)
+│   (WhisperKit)    │  Returns rawText + timed segments; deletes WAV on return
+└────────┬──────────┘
+         │ rawText + TimedSegment[]
+         ▼
+┌───────────────────┐
+│DiarizationService │  SpeakerKit (CoreML) — skipped when disabled
+│  (SpeakerKit)     │  Input: float array; Output: [Speaker N]-labeled text
+└────────┬──────────┘  No-op if only 1 speaker detected
+         │ labeled text
+         ▼
+┌───────────────────┐
+│  CleanupService   │  MLXLLM (ml-explore/mlx-swift-lm) — skipped when disabled
+│   (MLXLLM)        │  Removes fillers/false-starts; preserves [Speaker N] tokens
+└────────┬──────────┘  60 s timeout; falls back to labeled text on error
+         │ clean text
+         ▼
+┌───────────────────┐
+│   PasteService    │  Writes to NSPasteboard → simulates ⌘V via CGEvent
+│ (NSPasteboard)    │  Restores prior clipboard after paste
+└────────┬──────────┘
+         │
+         ▼
+┌───────────────────┐
+│  TranscriptStore  │  Appends entry to history.json (perms 600, no backup)
+└───────────────────┘
+```
+
+### Component overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    HonyakuApp  (@main SwiftUI App)               │
+│                                                                  │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │  MenuBarExtra  (.window style)                           │   │
+│  │  ┌────────────────────┐   ┌───────────────────────────┐ │   │
+│  │  │  MenuBarPopoverView│   │      SettingsView          │ │   │
+│  │  │  • Status header   │   │  • Models (download/switch)│ │   │
+│  │  │  • History list    │   │  • Audio device picker     │ │   │
+│  │  │  • Settings button │   │  • Cleanup toggle + prompt │ │   │
+│  │  └────────────────────┘   │  • Diarization toggle      │ │   │
+│  │                           │  • History / Privacy       │ │   │
+│  │  ┌────────────────────┐   └───────────────────────────┘ │   │
+│  │  │   OnboardingView   │   ┌───────────────────────────┐ │   │
+│  │  │  Mic + Accessibility│  │     SetupWizardView        │ │   │
+│  │  │  permission steps  │   │  Model picker → download   │ │   │
+│  │  └────────────────────┘   └───────────────────────────┘ │   │
+│  └──────────────────────────────────────────────────────────┘   │
+│                                                                  │
+│  ┌──────────────┐   ┌──────────────────────────────────────┐   │
+│  │   AppState   │   │        TranscriptionPipeline          │   │
+│  │ @Observable  │◀──│  Wires HotkeyService → pipeline steps │   │
+│  │ @MainActor   │   └──────────────────────────────────────┘   │
+│  └──────────────┘                                               │
+└─────────────────────────────────────────────────────────────────┘
+
+Storage layer
+┌─────────────────┬──────────────────────────────────────────────┐
+│ TranscriptStore │ ~/Library/Application Support/Honyaku/        │
+│                 │   history.json  (JSON, perms 600, no backup)  │
+├─────────────────┼──────────────────────────────────────────────┤
+│ ModelStore      │ ~/Library/Application Support/Honyaku/Models/ │
+│ ModelDownloader │   <type>/<model-id>/ — safetensors + configs  │
+│                 │   Downloaded via URLSession + HF API          │
+├─────────────────┼──────────────────────────────────────────────┤
+│ KeychainService │ macOS Keychain — HF access token only         │
+│                 │   Never used at runtime inference             │
+└─────────────────┴──────────────────────────────────────────────┘
+
+Network policy
+  Download only  ──▶  huggingface.co  (model files + HF repo API)
+  Never          ──▶  audio, transcripts, speaker data, telemetry
+```
+
+---
+
+## C4 Diagrams
+
+### Level 1 — System Context
+
+```mermaid
+C4Context
+    title System Context — Honyaku
+
+    Person(user, "Mac User", "Dictates text using push-to-talk on any Apple Silicon Mac")
+
+    System(honyaku, "Honyaku", "Native macOS menu bar app. Captures speech, transcribes, cleans, and pastes text entirely on-device.")
+
+    System_Ext(hf, "Hugging Face Hub", "Public model repository. Serves WhisperKit, SpeakerKit, and MLX model files over HTTPS.")
+
+    Rel(user, honyaku, "Holds ⌃ Control, speaks, receives pasted text")
+    Rel(honyaku, hf, "Downloads AI models once at setup", "HTTPS — never at runtime")
+
+    UpdateLayoutConfig($c4ShapeInRow="2", $c4BoundaryInRow="1")
+```
+
+---
+
+### Level 2 — Containers
+
+```mermaid
+C4Container
+    title Container Diagram — Honyaku
+
+    Person(user, "Mac User")
+    System_Ext(hf, "Hugging Face Hub", "Model files served over HTTPS")
+
+    System_Boundary(app, "Honyaku macOS App") {
+
+        Container(ui, "UI Layer", "SwiftUI / MenuBarExtra", "Menu bar popover, Settings, Onboarding wizard, Setup wizard. Reads AppState; no business logic.")
+
+        Container(shell, "App Shell & Pipeline", "Swift / @MainActor", "HonyakuApp entry point, AppState observable, TranscriptionPipeline orchestrator, HotkeyService CGEventTap.")
+
+        Container(asr, "Speech Engine", "WhisperKit (CoreML / ANE)", "Converts WAV audio to text and timed word segments. Runs entirely on-device via the Apple Neural Engine.")
+
+        Container(diar, "Diarization Engine", "SpeakerKit (CoreML / ANE)", "Identifies speakers from 16 kHz float audio. Optional; skipped when disabled. ~10 MB CoreML model.")
+
+        Container(llm, "LLM Cleanup Engine", "MLXLLM (Metal / ANE)", "Removes filler words and false starts using a Qwen 2.5 4-bit MLX model. Optional; falls back to raw text on timeout.")
+
+        Container(storage, "Storage Layer", "Swift / FileManager / Keychain", "TranscriptStore (history.json, perms 600), ModelStore (~/Library/…/Models/), KeychainService (HF token), ModelDownloader (URLSession).")
+    }
+
+    Rel(user, ui, "Opens popover, changes settings")
+    Rel(user, shell, "Holds ⌃ Control to trigger recording", "CGEventTap / Accessibility API")
+    Rel(ui, shell, "Reads AppState status and transcript history")
+    Rel(shell, asr, "Sends WAV file path", "async/await")
+    Rel(shell, diar, "Sends 16 kHz float array", "async/await (optional)")
+    Rel(shell, llm, "Sends speaker-labeled text + system prompt", "async/await (optional)")
+    Rel(shell, storage, "Persists transcript entries; reads/writes model cache")
+    Rel(storage, hf, "Downloads model files at setup", "HTTPS / URLSession")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+```
+
+---
+
+### Level 3 — Components (App Shell & Pipeline)
+
+```mermaid
+C4Component
+    title Component Diagram — App Shell & Pipeline
+
+    Person(user, "Mac User")
+    Container_Ext(ui, "UI Layer", "SwiftUI views")
+    Container_Ext(asr, "Speech Engine", "WhisperKit")
+    Container_Ext(diar, "Diarization Engine", "SpeakerKit")
+    Container_Ext(llm, "LLM Cleanup Engine", "MLXLLM")
+    Container_Ext(storage, "Storage Layer", "FileManager / Keychain")
+
+    Container_Boundary(shell, "App Shell & Pipeline") {
+
+        Component(appstate, "AppState", "@Observable @MainActor", "Single source of truth for pipeline status (idle / recording / transcribing / processing / error), feature toggles, and selected model IDs.")
+
+        Component(pipeline, "TranscriptionPipeline", "Swift class @MainActor", "Orchestrates the full recording lifecycle: start → ASR → diarization → cleanup → paste → persist. Updates AppState at each step.")
+
+        Component(hotkey, "HotkeyService", "CGEventTap", "Listens for bare ⌃ Control via flagsChanged events. Enforces 300 ms minimum hold. Suppresses chords. Calls pipeline start/stop.")
+
+        Component(audio, "AudioCaptureService", "AVAudioEngine", "Installs input node tap on keydown; removes on keyup. Buffers PCM in memory. Flushes to temp WAV + 16 kHz float array on release.")
+
+        Component(transcription, "TranscriptionService", "actor", "Wraps WhisperKit. Loads model on demand; caches loaded instance. Returns rawText + TimedSegment[]. Deletes temp WAV. 15 s timeout.")
+
+        Component(diarization, "DiarizationService", "actor", "Wraps SpeakerKit. Accepts float array; returns speaker-labeled text. Merges speaker segments with WhisperKit timed segments.")
+
+        Component(cleanup, "CleanupService", "actor", "Wraps MLXLLM ChatSession. Loads MLX model from ModelStore on first use. 60 s timeout; falls back to raw text silently.")
+
+        Component(paste, "PasteService", "Swift class", "Saves prior pasteboard, writes clean text, simulates ⌘V via CGEvent. Restores clipboard after paste. Clears on pipeline abort.")
+
+        Component(permissions, "PermissionManager", "ObservableObject", "Checks and requests Microphone + Accessibility permissions. Polls until granted; surfaces status in UI.")
+    }
+
+    Rel(user, hotkey, "Holds / releases ⌃ Control", "CGEventTap / Accessibility API")
+    Rel(hotkey, pipeline, "onRecordingStarted / onRecordingEnded")
+    Rel(pipeline, appstate, "Reads and writes status throughout pipeline")
+    Rel(pipeline, audio, "startCapture() / stopCaptureAndFlushBoth()")
+    Rel(pipeline, transcription, "transcribe(audioURL:modelID:)")
+    Rel(pipeline, diarization, "diarize(audioArray:) — if enabled")
+    Rel(pipeline, cleanup, "clean(text:prompt:) — if enabled")
+    Rel(pipeline, paste, "paste(text:)")
+    Rel(pipeline, storage, "transcriptStore.save(entry)")
+    Rel(transcription, asr, "WhisperKit.transcribe()")
+    Rel(diarization, diar, "SpeakerKit.diarize()")
+    Rel(cleanup, llm, "ChatSession.respond()")
+    Rel(ui, appstate, "Observes status and history")
+    Rel(ui, permissions, "Reads permission state")
+
+    UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
+```
+
+---
+
 ## Risks / Trade-offs
 
 | Risk | Mitigation |
@@ -121,7 +340,7 @@ A single `AppDelegate`-free entry point using `@main`. The menu bar extra is dri
 | pyannote models require HF access token on first download | Document clearly in setup wizard; token stored in Keychain, never transmitted at runtime |
 | Accessibility permission denial breaks hotkey and paste | Graceful fallback: show status popover with instructions; app remains functional for manual copy |
 | WhisperKit memory spikes on large models (>1 GB) | Expose model tier selector prominently; default to `small.en` (~466 MB); warn users before downloading large models |
-| GGUF model format fragmentation with LLM.swift | Pin tested model list; surface compatibility warnings if user provides a custom GGUF path |
+| MLX model format changes across mlx-swift-lm versions | Pin to a stable release (v2.30.6); test cleanup models after any SPM update |
 | App notarisation / Gatekeeper warnings | Sign and notarise via standard Apple Developer Program flow; document "Open Anyway" steps in README |
 
 ---

@@ -7,7 +7,7 @@ Honyaku is a native macOS menu bar app that converts speech to clean, intelligen
 ## Features
 
 - **Hold ⌃ Control** to record; release to transcribe and paste
-- **Local Whisper models** — tiny, small, multilingual, Parakeet
+- **Local Whisper models** — tiny, small, multilingual
 - **Local LLM cleanup** — removes filler words (um, uh, like), false starts, self-corrections
 - **Speaker diarization** — identify multiple speakers with `[Speaker 1]`, `[Speaker 2]` labels
 - **Menu bar only** — no Dock icon; lives quietly in your status bar
@@ -15,8 +15,28 @@ Honyaku is a native macOS menu bar app that converts speech to clean, intelligen
 
 ## Requirements
 
-- macOS 14.0 (Sonoma) or later
-- Apple Silicon Mac (M1 or newer) — required for WhisperKit Neural Engine acceleration
+### Operating system
+
+| Version | Support |
+|---|---|
+| macOS 14 Sonoma | ✅ Minimum supported |
+| macOS 15 Sequoia | ✅ Supported |
+| macOS 13 Ventura or earlier | ❌ Not supported |
+| iOS / iPadOS / visionOS | ❌ Not supported |
+
+### Hardware
+
+| Device | Support |
+|---|---|
+| Apple Silicon (M1, M2, M3, M4 series) | ✅ Required |
+| Intel Mac | ❌ Not supported |
+
+Apple Silicon is required for:
+- **WhisperKit** — CoreML models that run on the Apple Neural Engine (ANE)
+- **MLXLLM** — MLX framework requires Apple Silicon Metal/ANE for inference
+- **SpeakerKit** — CoreML diarization models optimised for ANE
+
+> Honyaku will not build or run on Intel Macs.
 
 ## Installation
 
@@ -42,13 +62,14 @@ Honyaku is a native macOS menu bar app that converts speech to clean, intelligen
 | Whisper tiny.en | 75 MB | Fastest, English only |
 | **Whisper small.en** (default) | 466 MB | Best speed/accuracy balance |
 | Whisper small (multilingual) | 466 MB | 99 languages |
-| Parakeet v3 | 1.4 GB | 25 languages |
 
 | Cleanup Model | Size | Speed |
 |---|---|---|
-| **Qwen 0.8B** (default) | 535 MB | ~1–2s |
-| Qwen 2B | 1.3 GB | ~4–5s |
-| Qwen 4B | 2.8 GB | ~5–7s |
+| **Qwen 2.5 1.5B 4-bit MLX** (default) | ~950 MB | ~2–3s on M1 |
+| Qwen 2.5 3B 4-bit MLX | ~1.9 GB | ~5–6s on M1 |
+| Qwen 2.5 7B 4-bit MLX | ~4.3 GB | ~10–15s on M1 |
+
+Cleanup runs with **temperature 0.0** (greedy decoding) for deterministic, faithful output — the model removes fillers without paraphrasing or inventing content.
 
 ## Privacy guarantee
 

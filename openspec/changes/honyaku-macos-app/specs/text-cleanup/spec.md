@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Raw transcript is processed by a local LLM to produce clean text
-The system SHALL pass the raw WhisperKit transcript to a locally-running LLM (via LLM.swift) to remove filler words, false starts, and self-corrections, producing a clean, readable output. The LLM SHALL run entirely on the local device; no transcript text SHALL be sent to any remote service.
+The system SHALL pass the raw WhisperKit transcript to a locally-running LLM (via MLXLLM) to remove filler words, false starts, and self-corrections, producing a clean, readable output. The LLM SHALL run entirely on the local device; no transcript text SHALL be sent to any remote service. The LLM SHALL use **temperature 0.0** (greedy decoding) to ensure deterministic, faithful output — the model removes fillers without paraphrasing or introducing new content.
 
 #### Scenario: Cleanup produces clean output
 - **WHEN** WhisperKit returns a transcript containing filler words (e.g., "um", "uh", "like", "you know")
@@ -18,13 +18,13 @@ The system SHALL support at minimum the following cleanup model tiers selectable
 
 | Tier | Model | Size | Speed |
 |---|---|---|---|
-| Fast | Qwen 3.5 0.8B (GGUF int8) | ~535 MB | ~1–2s |
-| Balanced | Qwen 3.5 2B (GGUF) | ~1.3 GB | ~4–5s |
-| Quality | Qwen 3.5 4B (GGUF) | ~2.8 GB | ~5–7s |
+| Fast | Qwen 2.5 1.5B Instruct 4-bit (MLX) | ~950 MB | ~2–3s |
+| Balanced | Qwen 2.5 3B Instruct 4-bit (MLX) | ~1.9 GB | ~5–6s |
+| Best | Qwen 2.5 7B Instruct 4-bit (MLX) | ~4.3 GB | ~10–15s |
 
 #### Scenario: User has selected the Fast tier
 - **WHEN** transcription completes and cleanup is triggered
-- **THEN** the system uses the Qwen 3.5 0.8B model for cleanup and returns a result in under 3 seconds on M1 hardware
+- **THEN** the system uses the Qwen 2.5 1.5B MLX model for cleanup and returns a result in under 3 seconds on M1 hardware
 
 ---
 

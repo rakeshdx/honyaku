@@ -31,7 +31,8 @@ actor CleanupService: CleanupServiceProtocol {
         return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
                 // Create a fresh session per call so history doesn't accumulate
-                let session = ChatSession(model, instructions: prompt)
+                let session = ChatSession(model, instructions: prompt,
+                                          generateParameters: .init(temperature: 0.0))
                 let response = try await session.respond(to: rawText)
                 let trimmed = response.trimmingCharacters(in: .whitespacesAndNewlines)
                 return trimmed.isEmpty ? rawText : trimmed
