@@ -1,0 +1,871 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		049A166A64C3B5FC3217EA3E /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = A74BA4419D0A6AF4134D24EB /* ServiceProtocols.swift */; };
+		066EC141C3171A1C5B6DB6E8 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7880787C7E8CD6744274D933 /* AudioCaptureService.swift */; };
+		08921E27BFD76F47EAD8560B /* HonyakuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A2D280C5A741F21D141381 /* HonyakuApp.swift */; };
+		1A8EA159DDF0C7D01B169C86 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF69E098890F20F841BEF94 /* KeychainService.swift */; };
+		23B30496629B70A530003765 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1DC3354B9B3F2DFE29B3C1F0 /* WhisperKit */; };
+		29331628FB46AFE38CB50ED0 /* IntegrationTestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55E8F9A4BA205025B2D191C /* IntegrationTestBase.swift */; };
+		2DAF325FD12CAD5EAF50E04F /* TranscriptEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6918104DEB9040B693339214 /* TranscriptEntry.swift */; };
+		365A191199A8125B2E6404D4 /* ModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61F172FEB18DC9B3D083562C /* ModelStore.swift */; };
+		3B732BC088AAF238A9540D7F /* SpeakerSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEA5ABED8EDE2CFD2F24ABE /* SpeakerSegment.swift */; };
+		416152D35FC4393FDDC2CE7A /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99CE8912C0EB663CD68C9B0 /* HotkeyService.swift */; };
+		41F9DE4191725ECF4E376EDB /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AB4C017207BC645E2B109E /* TranscriptionService.swift */; };
+		43F859F60A7E86C4E8819F7F /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 2D6D9362E6F2CCB39F6A3738 /* MLXLLM */; };
+		60993BB771B68FA6266F1581 /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0138529CE4C8D50F52201D8 /* TranscriptStoreTests.swift */; };
+		66A6F791FF282997419EF808 /* NetworkAuditDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1738FDD083A43E230D7320A /* NetworkAuditDelegate.swift */; };
+		6CA4A7FDEF537F3C687D737D /* SetupWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF52767FB75C2698B679399D /* SetupWizardView.swift */; };
+		776877AFAB943E1FAD37D69B /* PasteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6E45E968DE63F2C4790A010 /* PasteService.swift */; };
+		7A10F7EB18C2DECE878771C4 /* AppStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0C9096444D42859276843E9 /* AppStatus.swift */; };
+		8006DBB6F5331A8B3C7BBB53 /* ModelDownloaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CB3FF8431F439F227B38078 /* ModelDownloaderTests.swift */; };
+		84CDD4F7DE25C1A7D0F8AF76 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6ABAFD44C29F179B8B2E55E8 /* WhisperKit */; };
+		8DD7513BF6CC4DFC54DFA4EC /* ModelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FADEBDEBEF5B31404040B2 /* ModelInfo.swift */; };
+		8FD08101AC880370D53603E5 /* ModelRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38488E782725D0616D41E92E /* ModelRegistry.swift */; };
+		90224F430A7285766CAB031E /* PipelineOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF1407837A235C2A6CC930D /* PipelineOrderingTests.swift */; };
+		A487418403074B0D4B471E0C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC06FF839977DCFDEE2EFB7 /* OnboardingView.swift */; };
+		A9535B5D50EA0593C9BD61B1 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F329BCEF7214AACD95ED1C95 /* PermissionManager.swift */; };
+		AA8C3D3D0BCC347132D172DA /* PasteServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8469EA80F9B9C7FBDD532AF7 /* PasteServiceTests.swift */; };
+		AC9775274A6F0D13F165A308 /* HotkeyServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */; };
+		B03EE0FA66EA3E958F5BB886 /* MenuBarPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36529057270B2C549B152B89 /* MenuBarPopoverView.swift */; };
+		B3B5D2A8A966A589DF707322 /* DiarizationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EE13AC04B231794090E185 /* DiarizationIntegrationTests.swift */; };
+		B51EEF0734648F3ED1176F58 /* TranscriptionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED5F76025E88CFDF11D0CEF /* TranscriptionIntegrationTests.swift */; };
+		C6B4D5352FC6E6F359C9E01D /* CleanupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AD0AFFCE09D97153A57908 /* CleanupService.swift */; };
+		C7B69514F08B7020474EFEDC /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = BA58CD77C6ACD9A9913F0561 /* MLXLMCommon */; };
+		D6AAC2272D7FD199FB76E31A /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5037D1267461BD4C8CB3133A /* TranscriptStore.swift */; };
+		DA2387ED0031DAD6E709D402 /* DiarizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7164FEEB539FA3D90612E4 /* DiarizationService.swift */; };
+		DB70FE3E86A52E2EB49EDEFF /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098B82AAFBDAFCBF79C63CAF /* ModelDownloader.swift */; };
+		DDFF36075D1001D5ADD71CDC /* SpeakerKit in Frameworks */ = {isa = PBXBuildFile; productRef = F21FC78D7D330656D929FB71 /* SpeakerKit */; };
+		DFD80E80AE4CB494BD3D8451 /* TranscriptionPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8BB9ECC822E8BF55CFF05EF /* TranscriptionPipeline.swift */; };
+		E23C10B466FB606206E800B8 /* TempFileCleanupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB38E35DE0C5043B25E5E0E4 /* TempFileCleanupTests.swift */; };
+		EF29F35D1350CEB4B0F77609 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6AB6D1C72B6F524BD81889 /* AppState.swift */; };
+		F31EAB335ACFC4E942B96E15 /* MenuBarUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3815F419E6149EE66A738839 /* MenuBarUITests.swift */; };
+		FC1B64531A7EDF47DE8A97E6 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2076911DD6ACFFFA3133984 /* SettingsView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		013E11261A5424DA094B28C6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7140994496E663A6A6CFC903 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FCFABFCBAAEAD5D5B5BE3467;
+			remoteInfo = Honyaku;
+		};
+		095A3549FCD1271A0006F856 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7140994496E663A6A6CFC903 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FCFABFCBAAEAD5D5B5BE3467;
+			remoteInfo = Honyaku;
+		};
+		120A968E0D10F8AF65D9B58A /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 7140994496E663A6A6CFC903 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FCFABFCBAAEAD5D5B5BE3467;
+			remoteInfo = Honyaku;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		098B82AAFBDAFCBF79C63CAF /* ModelDownloader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloader.swift; sourceTree = "<group>"; };
+		1EF69E098890F20F841BEF94 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
+		20FADEBDEBEF5B31404040B2 /* ModelInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelInfo.swift; sourceTree = "<group>"; };
+		2EEA5ABED8EDE2CFD2F24ABE /* SpeakerSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSegment.swift; sourceTree = "<group>"; };
+		36529057270B2C549B152B89 /* MenuBarPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarPopoverView.swift; sourceTree = "<group>"; };
+		3815F419E6149EE66A738839 /* MenuBarUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarUITests.swift; sourceTree = "<group>"; };
+		38488E782725D0616D41E92E /* ModelRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelRegistry.swift; sourceTree = "<group>"; };
+		5037D1267461BD4C8CB3133A /* TranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStore.swift; sourceTree = "<group>"; };
+		5ED5F76025E88CFDF11D0CEF /* TranscriptionIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionIntegrationTests.swift; sourceTree = "<group>"; };
+		5FF1407837A235C2A6CC930D /* PipelineOrderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineOrderingTests.swift; sourceTree = "<group>"; };
+		61F172FEB18DC9B3D083562C /* ModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelStore.swift; sourceTree = "<group>"; };
+		6918104DEB9040B693339214 /* TranscriptEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptEntry.swift; sourceTree = "<group>"; };
+		69AD0AFFCE09D97153A57908 /* CleanupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupService.swift; sourceTree = "<group>"; };
+		6F7164FEEB539FA3D90612E4 /* DiarizationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiarizationService.swift; sourceTree = "<group>"; };
+		7880787C7E8CD6744274D933 /* AudioCaptureService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioCaptureService.swift; sourceTree = "<group>"; };
+		7CB3FF8431F439F227B38078 /* ModelDownloaderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloaderTests.swift; sourceTree = "<group>"; };
+		8469EA80F9B9C7FBDD532AF7 /* PasteServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteServiceTests.swift; sourceTree = "<group>"; };
+		8E6AB6D1C72B6F524BD81889 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		93AB4C017207BC645E2B109E /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
+		A66A4EA2D911AA4D16799AC2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		A74BA4419D0A6AF4134D24EB /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
+		AC2CE35BC618354D54B90D40 /* HonyakuTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HonyakuTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B0138529CE4C8D50F52201D8 /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
+		B1738FDD083A43E230D7320A /* NetworkAuditDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkAuditDelegate.swift; sourceTree = "<group>"; };
+		B6A2D280C5A741F21D141381 /* HonyakuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HonyakuApp.swift; sourceTree = "<group>"; };
+		BF52767FB75C2698B679399D /* SetupWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWizardView.swift; sourceTree = "<group>"; };
+		C6EE13AC04B231794090E185 /* DiarizationIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiarizationIntegrationTests.swift; sourceTree = "<group>"; };
+		C99CE8912C0EB663CD68C9B0 /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
+		CFC06FF839977DCFDEE2EFB7 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		D6E45E968DE63F2C4790A010 /* PasteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteService.swift; sourceTree = "<group>"; };
+		D840E374AB63FA153B6C9FB2 /* HonyakuIntegrationTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HonyakuIntegrationTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		DB38E35DE0C5043B25E5E0E4 /* TempFileCleanupTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempFileCleanupTests.swift; sourceTree = "<group>"; };
+		DFF9B8EA7D4E1749EF3C27D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E55E8F9A4BA205025B2D191C /* IntegrationTestBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationTestBase.swift; sourceTree = "<group>"; };
+		E8BB9ECC822E8BF55CFF05EF /* TranscriptionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionPipeline.swift; sourceTree = "<group>"; };
+		F0C1C41D77BF1178238E6FB1 /* Honyaku.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Honyaku.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F0C9096444D42859276843E9 /* AppStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStatus.swift; sourceTree = "<group>"; };
+		F2076911DD6ACFFFA3133984 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		F329BCEF7214AACD95ED1C95 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
+		F59C44AAB42D6A48B1CBAF31 /* HonyakuUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HonyakuUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyServiceTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		21B21B205FB792F3CD971E83 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84CDD4F7DE25C1A7D0F8AF76 /* WhisperKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F5787DA1921EC78EE332C8A7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				23B30496629B70A530003765 /* WhisperKit in Frameworks */,
+				DDFF36075D1001D5ADD71CDC /* SpeakerKit in Frameworks */,
+				43F859F60A7E86C4E8819F7F /* MLXLLM in Frameworks */,
+				C7B69514F08B7020474EFEDC /* MLXLMCommon in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		01849C45560D8E4905FB9A3E /* Protocols */ = {
+			isa = PBXGroup;
+			children = (
+				A74BA4419D0A6AF4134D24EB /* ServiceProtocols.swift */,
+			);
+			path = Protocols;
+			sourceTree = "<group>";
+		};
+		09A407A3BF28F02B1155E51D /* Sources */ = {
+			isa = PBXGroup;
+			children = (
+				C0D96D3A4660FAE056EAE244 /* Honyaku */,
+			);
+			path = Sources;
+			sourceTree = "<group>";
+		};
+		1AECCF5B67988DF2136F093D /* HonyakuTests */ = {
+			isa = PBXGroup;
+			children = (
+				FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */,
+				DFF9B8EA7D4E1749EF3C27D9 /* Info.plist */,
+				7CB3FF8431F439F227B38078 /* ModelDownloaderTests.swift */,
+				8469EA80F9B9C7FBDD532AF7 /* PasteServiceTests.swift */,
+				5FF1407837A235C2A6CC930D /* PipelineOrderingTests.swift */,
+				DB38E35DE0C5043B25E5E0E4 /* TempFileCleanupTests.swift */,
+				B0138529CE4C8D50F52201D8 /* TranscriptStoreTests.swift */,
+			);
+			path = HonyakuTests;
+			sourceTree = "<group>";
+		};
+		3C13A0835E97FA9AA38FE174 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				F0C1C41D77BF1178238E6FB1 /* Honyaku.app */,
+				D840E374AB63FA153B6C9FB2 /* HonyakuIntegrationTests.xctest */,
+				AC2CE35BC618354D54B90D40 /* HonyakuTests.xctest */,
+				F59C44AAB42D6A48B1CBAF31 /* HonyakuUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		4EFC83CD2981BB040A406BA3 /* HonyakuIntegrationTests */ = {
+			isa = PBXGroup;
+			children = (
+				C6EE13AC04B231794090E185 /* DiarizationIntegrationTests.swift */,
+				A66A4EA2D911AA4D16799AC2 /* Info.plist */,
+				E55E8F9A4BA205025B2D191C /* IntegrationTestBase.swift */,
+				5ED5F76025E88CFDF11D0CEF /* TranscriptionIntegrationTests.swift */,
+			);
+			path = HonyakuIntegrationTests;
+			sourceTree = "<group>";
+		};
+		549D04DE0F4482D543A83A40 /* HonyakuUITests */ = {
+			isa = PBXGroup;
+			children = (
+				3815F419E6149EE66A738839 /* MenuBarUITests.swift */,
+			);
+			path = HonyakuUITests;
+			sourceTree = "<group>";
+		};
+		7F2CC9C8D5BE41A9AAD2B211 /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				7880787C7E8CD6744274D933 /* AudioCaptureService.swift */,
+				69AD0AFFCE09D97153A57908 /* CleanupService.swift */,
+				6F7164FEEB539FA3D90612E4 /* DiarizationService.swift */,
+				C99CE8912C0EB663CD68C9B0 /* HotkeyService.swift */,
+				1EF69E098890F20F841BEF94 /* KeychainService.swift */,
+				098B82AAFBDAFCBF79C63CAF /* ModelDownloader.swift */,
+				38488E782725D0616D41E92E /* ModelRegistry.swift */,
+				61F172FEB18DC9B3D083562C /* ModelStore.swift */,
+				B1738FDD083A43E230D7320A /* NetworkAuditDelegate.swift */,
+				D6E45E968DE63F2C4790A010 /* PasteService.swift */,
+				F329BCEF7214AACD95ED1C95 /* PermissionManager.swift */,
+				93AB4C017207BC645E2B109E /* TranscriptionService.swift */,
+				5037D1267461BD4C8CB3133A /* TranscriptStore.swift */,
+				01849C45560D8E4905FB9A3E /* Protocols */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		8B0828A9ADC0B0EDE0ADE394 = {
+			isa = PBXGroup;
+			children = (
+				4EFC83CD2981BB040A406BA3 /* HonyakuIntegrationTests */,
+				1AECCF5B67988DF2136F093D /* HonyakuTests */,
+				549D04DE0F4482D543A83A40 /* HonyakuUITests */,
+				09A407A3BF28F02B1155E51D /* Sources */,
+				3C13A0835E97FA9AA38FE174 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A84D8913C4ADBB1671C36855 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				8E6AB6D1C72B6F524BD81889 /* AppState.swift */,
+				B6A2D280C5A741F21D141381 /* HonyakuApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		C0D96D3A4660FAE056EAE244 /* Honyaku */ = {
+			isa = PBXGroup;
+			children = (
+				A84D8913C4ADBB1671C36855 /* App */,
+				CBE2F77913338F970C8CDAB9 /* Models */,
+				FEF93D82D801CCAA0C197E91 /* Pipeline */,
+				7F2CC9C8D5BE41A9AAD2B211 /* Services */,
+				EAC87FC8A955BC7CBA668DA4 /* Views */,
+			);
+			path = Honyaku;
+			sourceTree = "<group>";
+		};
+		CBE2F77913338F970C8CDAB9 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				F0C9096444D42859276843E9 /* AppStatus.swift */,
+				20FADEBDEBEF5B31404040B2 /* ModelInfo.swift */,
+				2EEA5ABED8EDE2CFD2F24ABE /* SpeakerSegment.swift */,
+				6918104DEB9040B693339214 /* TranscriptEntry.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		EAC87FC8A955BC7CBA668DA4 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				36529057270B2C549B152B89 /* MenuBarPopoverView.swift */,
+				CFC06FF839977DCFDEE2EFB7 /* OnboardingView.swift */,
+				F2076911DD6ACFFFA3133984 /* SettingsView.swift */,
+				BF52767FB75C2698B679399D /* SetupWizardView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		FEF93D82D801CCAA0C197E91 /* Pipeline */ = {
+			isa = PBXGroup;
+			children = (
+				E8BB9ECC822E8BF55CFF05EF /* TranscriptionPipeline.swift */,
+			);
+			path = Pipeline;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3703FC7CC9F5B66E6CC3ED49 /* HonyakuTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 67DAC10E6FC2FFF3A892C2B0 /* Build configuration list for PBXNativeTarget "HonyakuTests" */;
+			buildPhases = (
+				1D5C3673D16AF3C2263420C5 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4F3E0F3A0C53B0C6EA702A53 /* PBXTargetDependency */,
+			);
+			name = HonyakuTests;
+			packageProductDependencies = (
+			);
+			productName = HonyakuTests;
+			productReference = AC2CE35BC618354D54B90D40 /* HonyakuTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		C7B18B3F7F6F357A0CAB0A56 /* HonyakuUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C968A019C09F9E5200321DA8 /* Build configuration list for PBXNativeTarget "HonyakuUITests" */;
+			buildPhases = (
+				8B4AFAC7284C23757F005A36 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				6DE7C096669249AF73A0DC5D /* PBXTargetDependency */,
+			);
+			name = HonyakuUITests;
+			packageProductDependencies = (
+			);
+			productName = HonyakuUITests;
+			productReference = F59C44AAB42D6A48B1CBAF31 /* HonyakuUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		F439153BCD35991A84B51199 /* HonyakuIntegrationTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D7411F20E34BE3B9C0370F7C /* Build configuration list for PBXNativeTarget "HonyakuIntegrationTests" */;
+			buildPhases = (
+				4BF28F465A914BA9B97DAEC3 /* Sources */,
+				21B21B205FB792F3CD971E83 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3C939349B21A22E6DA353CED /* PBXTargetDependency */,
+			);
+			name = HonyakuIntegrationTests;
+			packageProductDependencies = (
+				6ABAFD44C29F179B8B2E55E8 /* WhisperKit */,
+			);
+			productName = HonyakuIntegrationTests;
+			productReference = D840E374AB63FA153B6C9FB2 /* HonyakuIntegrationTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		FCFABFCBAAEAD5D5B5BE3467 /* Honyaku */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4F4415FD359013CE5371AFC4 /* Build configuration list for PBXNativeTarget "Honyaku" */;
+			buildPhases = (
+				F08E6908E13B68FE1F0C0236 /* Sources */,
+				F5787DA1921EC78EE332C8A7 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = Honyaku;
+			packageProductDependencies = (
+				1DC3354B9B3F2DFE29B3C1F0 /* WhisperKit */,
+				F21FC78D7D330656D929FB71 /* SpeakerKit */,
+				2D6D9362E6F2CCB39F6A3738 /* MLXLLM */,
+				BA58CD77C6ACD9A9913F0561 /* MLXLMCommon */,
+			);
+			productName = Honyaku;
+			productReference = F0C1C41D77BF1178238E6FB1 /* Honyaku.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		7140994496E663A6A6CFC903 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					C7B18B3F7F6F357A0CAB0A56 = {
+						TestTargetID = FCFABFCBAAEAD5D5B5BE3467;
+					};
+					FCFABFCBAAEAD5D5B5BE3467 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
+			};
+			buildConfigurationList = 1A632CD3BAB77F79CCD48C0E /* Build configuration list for PBXProject "Honyaku" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 8B0828A9ADC0B0EDE0ADE394;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				FF2AEBA83D4E9AF74C3D6286 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3C13A0835E97FA9AA38FE174 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				FCFABFCBAAEAD5D5B5BE3467 /* Honyaku */,
+				F439153BCD35991A84B51199 /* HonyakuIntegrationTests */,
+				3703FC7CC9F5B66E6CC3ED49 /* HonyakuTests */,
+				C7B18B3F7F6F357A0CAB0A56 /* HonyakuUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		1D5C3673D16AF3C2263420C5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AC9775274A6F0D13F165A308 /* HotkeyServiceTests.swift in Sources */,
+				8006DBB6F5331A8B3C7BBB53 /* ModelDownloaderTests.swift in Sources */,
+				AA8C3D3D0BCC347132D172DA /* PasteServiceTests.swift in Sources */,
+				90224F430A7285766CAB031E /* PipelineOrderingTests.swift in Sources */,
+				E23C10B466FB606206E800B8 /* TempFileCleanupTests.swift in Sources */,
+				60993BB771B68FA6266F1581 /* TranscriptStoreTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4BF28F465A914BA9B97DAEC3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B3B5D2A8A966A589DF707322 /* DiarizationIntegrationTests.swift in Sources */,
+				29331628FB46AFE38CB50ED0 /* IntegrationTestBase.swift in Sources */,
+				B51EEF0734648F3ED1176F58 /* TranscriptionIntegrationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8B4AFAC7284C23757F005A36 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F31EAB335ACFC4E942B96E15 /* MenuBarUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F08E6908E13B68FE1F0C0236 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EF29F35D1350CEB4B0F77609 /* AppState.swift in Sources */,
+				7A10F7EB18C2DECE878771C4 /* AppStatus.swift in Sources */,
+				066EC141C3171A1C5B6DB6E8 /* AudioCaptureService.swift in Sources */,
+				C6B4D5352FC6E6F359C9E01D /* CleanupService.swift in Sources */,
+				DA2387ED0031DAD6E709D402 /* DiarizationService.swift in Sources */,
+				08921E27BFD76F47EAD8560B /* HonyakuApp.swift in Sources */,
+				416152D35FC4393FDDC2CE7A /* HotkeyService.swift in Sources */,
+				1A8EA159DDF0C7D01B169C86 /* KeychainService.swift in Sources */,
+				B03EE0FA66EA3E958F5BB886 /* MenuBarPopoverView.swift in Sources */,
+				DB70FE3E86A52E2EB49EDEFF /* ModelDownloader.swift in Sources */,
+				8DD7513BF6CC4DFC54DFA4EC /* ModelInfo.swift in Sources */,
+				8FD08101AC880370D53603E5 /* ModelRegistry.swift in Sources */,
+				365A191199A8125B2E6404D4 /* ModelStore.swift in Sources */,
+				66A6F791FF282997419EF808 /* NetworkAuditDelegate.swift in Sources */,
+				A487418403074B0D4B471E0C /* OnboardingView.swift in Sources */,
+				776877AFAB943E1FAD37D69B /* PasteService.swift in Sources */,
+				A9535B5D50EA0593C9BD61B1 /* PermissionManager.swift in Sources */,
+				049A166A64C3B5FC3217EA3E /* ServiceProtocols.swift in Sources */,
+				FC1B64531A7EDF47DE8A97E6 /* SettingsView.swift in Sources */,
+				6CA4A7FDEF537F3C687D737D /* SetupWizardView.swift in Sources */,
+				3B732BC088AAF238A9540D7F /* SpeakerSegment.swift in Sources */,
+				2DAF325FD12CAD5EAF50E04F /* TranscriptEntry.swift in Sources */,
+				D6AAC2272D7FD199FB76E31A /* TranscriptStore.swift in Sources */,
+				DFD80E80AE4CB494BD3D8451 /* TranscriptionPipeline.swift in Sources */,
+				41F9DE4191725ECF4E376EDB /* TranscriptionService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3C939349B21A22E6DA353CED /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FCFABFCBAAEAD5D5B5BE3467 /* Honyaku */;
+			targetProxy = 095A3549FCD1271A0006F856 /* PBXContainerItemProxy */;
+		};
+		4F3E0F3A0C53B0C6EA702A53 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FCFABFCBAAEAD5D5B5BE3467 /* Honyaku */;
+			targetProxy = 013E11261A5424DA094B28C6 /* PBXContainerItemProxy */;
+		};
+		6DE7C096669249AF73A0DC5D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FCFABFCBAAEAD5D5B5BE3467 /* Honyaku */;
+			targetProxy = 120A968E0D10F8AF65D9B58A /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		63852CB1EC6DC6F823D42717 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = HonyakuTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.honyaku.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Honyaku.app/Contents/MacOS/Honyaku";
+			};
+			name = Debug;
+		};
+		6B48C4D3298FA17203B81963 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.honyaku.ui-tests";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_TARGET_NAME = Honyaku;
+			};
+			name = Debug;
+		};
+		72AB69458A6BAC3D2AB97B5D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.honyaku.ui-tests";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_TARGET_NAME = Honyaku;
+			};
+			name = Release;
+		};
+		797AD06F1E1EE9255AC5A15E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = HonyakuTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.honyaku.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Honyaku.app/Contents/MacOS/Honyaku";
+			};
+			name = Release;
+		};
+		9A3EA029B5B870C386C74B3B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A9AE5F0BB2C3E5DE8C357CA9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/Resources/Honyaku.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.honyaku.app;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Debug;
+		};
+		AE2F2A2A9575A735FF10821A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Sources/Resources/Honyaku.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				COMBINE_HIDPI_IMAGES = YES;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = Sources/Resources/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.honyaku.app;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+			};
+			name = Release;
+		};
+		B152454083C1C6BD8AE67454 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = HonyakuIntegrationTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.honyaku.integration-tests";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Honyaku.app/Contents/MacOS/Honyaku";
+			};
+			name = Debug;
+		};
+		C0EE7C7C786CDA3BB07DD67F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_FILE = HonyakuIntegrationTests/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.honyaku.integration-tests";
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Honyaku.app/Contents/MacOS/Honyaku";
+			};
+			name = Release;
+		};
+		C756551509FFE31FAE6C565A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1A632CD3BAB77F79CCD48C0E /* Build configuration list for PBXProject "Honyaku" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C756551509FFE31FAE6C565A /* Debug */,
+				9A3EA029B5B870C386C74B3B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		4F4415FD359013CE5371AFC4 /* Build configuration list for PBXNativeTarget "Honyaku" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A9AE5F0BB2C3E5DE8C357CA9 /* Debug */,
+				AE2F2A2A9575A735FF10821A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		67DAC10E6FC2FFF3A892C2B0 /* Build configuration list for PBXNativeTarget "HonyakuTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				63852CB1EC6DC6F823D42717 /* Debug */,
+				797AD06F1E1EE9255AC5A15E /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C968A019C09F9E5200321DA8 /* Build configuration list for PBXNativeTarget "HonyakuUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6B48C4D3298FA17203B81963 /* Debug */,
+				72AB69458A6BAC3D2AB97B5D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D7411F20E34BE3B9C0370F7C /* Build configuration list for PBXNativeTarget "HonyakuIntegrationTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B152454083C1C6BD8AE67454 /* Debug */,
+				C0EE7C7C786CDA3BB07DD67F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/argmaxinc/WhisperKit";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+		FF2AEBA83D4E9AF74C3D6286 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift-lm";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.30.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1DC3354B9B3F2DFE29B3C1F0 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+		2D6D9362E6F2CCB39F6A3738 /* MLXLLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FF2AEBA83D4E9AF74C3D6286 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLLM;
+		};
+		6ABAFD44C29F179B8B2E55E8 /* WhisperKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = WhisperKit;
+		};
+		BA58CD77C6ACD9A9913F0561 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FF2AEBA83D4E9AF74C3D6286 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
+			productName = MLXLMCommon;
+		};
+		F21FC78D7D330656D929FB71 /* SpeakerKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */;
+			productName = SpeakerKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 7140994496E663A6A6CFC903 /* Project object */;
+}

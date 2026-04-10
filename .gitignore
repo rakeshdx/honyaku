@@ -1,0 +1,28 @@
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.xcarchive
+
+# Xcode DerivedData
+Honyaku.xcodeproj/xcuserdata/
+Honyaku.xcodeproj/project.xcworkspace/xcuserdata/
+
+# SPM resolved (regenerated on resolve)
+Honyaku.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+# Dependencies (local patched copy — no longer used)
+Dependencies/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Build artifacts
+build/
+*.o
+*.d
