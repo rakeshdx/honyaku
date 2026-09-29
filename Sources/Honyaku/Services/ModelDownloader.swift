@@ -87,6 +87,15 @@ actor ModelDownloader: ModelDownloading {
             try FileManager.default.createDirectory(at: destDir, withIntermediateDirectories: true)
 
             try await downloadFile(request: request, to: destURL, progress: fileProgress)
+
+            // A corrupt file must not be left behind looking like a finished download
+            if let expected = model.sha256Checksums[fileName] {
+                let actual = try sha256(of: destURL)
+                guard actual == expected.lowercased() else {
+                    try? FileManager.default.removeItem(at: destURL)
+                    throw ModelDownloadError.checksumMismatch(expected: expected, actual: actual)
+                }
+            }
         }
 
         progress(1.0)
@@ -142,9 +151,14 @@ actor ModelDownloader: ModelDownloading {
     }
 
     private func sha256(of url: URL) throws -> String {
-        let data = try Data(contentsOf: url)
-        let digest = SHA256.hash(data: data)
-        return digest.map { String(format: "%02x", $0) }.joined()
+        // Stream in chunks — model files can be several GB
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 4 * 1024 * 1024), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
     private func unzip(at zipURL: URL, to directory: URL) throws {
