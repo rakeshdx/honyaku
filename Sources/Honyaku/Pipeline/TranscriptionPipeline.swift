@@ -18,8 +18,17 @@ final class TranscriptionPipeline {
         audioCapture.onDeviceDisconnected = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                // Stop the live engine first; otherwise key-up bails on the error state and the tap leaks
-                self.cancelRecording()
+                switch self.appState.status {
+                case .recording:
+                    // Stop the live engine first; otherwise key-up bails on the error state and the tap leaks
+                    self.cancelRecording()
+                case .transcribing, .processing:
+                    // The in-flight run owns the status; an error here would unblock a new recording
+                    // whose state that run then overwrites, leaving the mic on
+                    return
+                default:
+                    break
+                }
                 self.appState.setError("Microphone disconnected — switched to system default.")
             }
         }
@@ -31,7 +40,7 @@ final class TranscriptionPipeline {
         let modelID = appState.selectedSpeechModelID
         let cleanupEnabled = appState.cleanupEnabled
         Task {
-            try? await transcription.prepare(modelID: modelID)
+            try? await transcription.prepareIfDownloaded(modelID: modelID)
             if cleanupEnabled { try? await cleanup.prepare() }
         }
     }

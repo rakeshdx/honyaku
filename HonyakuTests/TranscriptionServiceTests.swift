@@ -3,16 +3,20 @@ import XCTest
 
 final class TranscriptionDecodeOptionsTests: XCTestCase {
 
-    func testShortClipIsNotTrimmed() {
+    func testSubSecondClipGetsTrimJustUnderItsLength() throws {
         // Default 1 s trim would skip this clip without decoding it
-        XCTAssertEqual(TranscriptionService.decodeOptions(forDurationSeconds: 0.5)?.windowClipTime, 0)
+        let trim = try XCTUnwrap(TranscriptionService.decodeOptions(forDurationSeconds: 0.5)?.windowClipTime)
+        XCTAssertEqual(trim, 0.4, accuracy: 0.001)
     }
 
-    func testClipJustUnderOneWindowIsNotTrimmed() {
-        XCTAssertEqual(TranscriptionService.decodeOptions(forDurationSeconds: 29.9)?.windowClipTime, 0)
+    func testVeryShortClipNeverGetsNegativeTrim() throws {
+        let trim = try XCTUnwrap(TranscriptionService.decodeOptions(forDurationSeconds: 0.05)?.windowClipTime)
+        XCTAssertEqual(trim, 0, accuracy: 0.001)
     }
 
-    func testLongClipKeepsWhisperKitDefaults() {
+    func testClipsFromOnePointOneSecondsKeepWhisperKitDefaults() {
+        XCTAssertNil(TranscriptionService.decodeOptions(forDurationSeconds: 1.1))
+        XCTAssertNil(TranscriptionService.decodeOptions(forDurationSeconds: 29.9))
         XCTAssertNil(TranscriptionService.decodeOptions(forDurationSeconds: 45))
     }
 
@@ -33,6 +37,11 @@ final class NonSpeechAnnotationTests: XCTestCase {
 
     func testBareParentheticalBecomesEmpty() {
         XCTAssertEqual(TranscriptionService.stripNonSpeech("(silence)"), "")
+    }
+
+    func testAnnotationOnlySegmentDropsOutOfAssembledText() {
+        XCTAssertEqual(TranscriptionService.assembleText(["(clears throat)", " Send the report."]), "Send the report.")
+        XCTAssertEqual(TranscriptionService.assembleText(["<|0.00|> Hello<|1.00|>", "[BLANK_AUDIO]"]), "Hello")
     }
 
     func testParenthesesInSpeechAreKept() {

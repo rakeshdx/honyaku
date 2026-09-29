@@ -26,6 +26,10 @@ When an audio input device disconnects while a recording is active, the system S
 - **WHEN** the user presses and holds Control again
 - **THEN** a new recording starts on the current default input without crashing
 
+#### Scenario: Audio device disconnects while a dictation is being transcribed
+- **WHEN** an audio input disconnects after Control was released, while the transcript is still being produced
+- **THEN** the dictation finishes normally and the status is not changed to an error, so the next press records and stops as usual
+
 #### Scenario: Non-audio device disconnects
 - **WHEN** a device without audio (for example a webcam with no microphone) disconnects while the user is dictating
 - **THEN** the recording continues unaffected and no error is shown
@@ -72,7 +76,7 @@ The system SHALL prepare the audio engine's input ahead of the first press, and 
 ---
 
 ### Requirement: Models are loaded at launch
-Once setup is complete, the system SHALL load the selected speech model and, if cleanup is enabled, the selected cleanup model in the background at launch, so the first dictation is about as fast as later ones. A dictation made while the models are still loading SHALL wait for that load rather than start a second one.
+Once setup is complete, the system SHALL load the selected speech model and, if cleanup is enabled, the selected cleanup model in the background at launch, so the first dictation is about as fast as later ones. Warm-up SHALL only load models already on disk; it SHALL NOT start a download. A dictation made while the models are still loading SHALL wait for that load rather than start a second one.
 
 #### Scenario: First dictation after launch
 - **GIVEN** Honyaku launched a few seconds ago with setup complete
@@ -82,3 +86,8 @@ Once setup is complete, the system SHALL load the selected speech model and, if 
 #### Scenario: Dictation during warm-up
 - **WHEN** the user dictates while the models are still loading at launch
 - **THEN** the dictation waits for the in-progress load, and each model is loaded only once
+
+#### Scenario: Speech model not on disk at launch
+- **GIVEN** the selected speech model hasn't been downloaded
+- **WHEN** Honyaku launches
+- **THEN** warm-up skips it and nothing is downloaded until the user's first dictation needs it

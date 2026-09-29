@@ -11,7 +11,7 @@ actor PasteService: PasteServiceProtocol {
     private let sendPasteKeystroke: @Sendable () throws -> Void
 
     /// `sendPasteKeystroke` defaults to a real ⌘V; tests inject a recorder so they never type into other apps.
-    init(sendPasteKeystroke: @escaping @Sendable () throws -> Void = PasteService.postCommandV) {
+    init(sendPasteKeystroke: @escaping @Sendable () throws -> Void = { try PasteService.postCommandV() }) {
         self.sendPasteKeystroke = sendPasteKeystroke
     }
 

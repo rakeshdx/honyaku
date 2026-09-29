@@ -67,3 +67,17 @@
 
 - [x] 12.1 Add `prepare` to `TranscriptionService` and `CleanupService` with in-flight load de-duplication; add `TranscriptionPipeline.warmUp()` and call it when the pipeline is created
 - [x] 12.2 Verify from the logs that both models load at launch, and that the first dictation's release-to-paste time is close to later ones
+
+## 13. Re-review fixes
+
+- [x] 13.1 `decodeOptions`: under 1.1 s → `windowClipTime = max(0, duration − 0.1)`, otherwise nil; update its tests
+- [x] 13.2 `isFaithful(raw:cleaned:)` (two-way, set-off fillers, curly apostrophes); `stripDelimiters` strips `Cleaned:`, keeps quotes that aren't just wrapping; fallback leaves hyphenated words and tidies leading punctuation; unit tests for every spec scenario
+- [x] 13.3 `CleanupService.modelOutput(for:prompt:)`; integration tests assert `isFaithful` on the raw model output for held-out sentences with no overlap with the examples
+- [x] 13.4 Warm-up uses `transcription.prepareIfDownloaded(modelID:)`
+- [x] 13.5 Log local speech-model load failures (error type only)
+- [x] 13.6 Assemble `rawText` from cleaned segments (`assembleText`); unit-test the `(clears throat)` case
+- [x] 13.7 `PasteService` default sender as a closure (clears the Sendable warning)
+- [x] 13.8 Disconnect handler acts on status per design Decision 12
+- [x] 13.9 Re-enable the event tap and reconcile the press per design Decision 13
+- [x] 13.10 Clean build with no warnings in project sources; unit and cleanup integration tests pass
+- [x] 13.11 Developer: quick checks — short word, "Are you working or not?", "I like it", silent hold, first press after relaunch

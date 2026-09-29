@@ -58,11 +58,21 @@ final class HotkeyService: HotkeyServiceProtocol {
     // MARK: - Event handler
 
     private func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            // macOS switched the tap off; a release that happened meanwhile was never delivered, so
+            // re-enable and replay the live Control state — otherwise the mic stays on
+            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            _ = apply(flags: CGEventSource.flagsState(.combinedSessionState))
+            return Unmanaged.passUnretained(event)
+        }
         guard type == .flagsChanged else {
             return Unmanaged.passUnretained(event)
         }
+        return apply(flags: event.flags) ? nil : Unmanaged.passUnretained(event)
+    }
 
-        let flags = event.flags
+    /// Runs the gesture for a modifier state and fires the matching callback. Returns true to swallow the event.
+    private func apply(flags: CGEventFlags) -> Bool {
         let action = gesture.controlChanged(
             controlDown: flags.contains(.maskControl),
             otherModifiers: flags.contains(.maskCommand) || flags.contains(.maskAlternate) || flags.contains(.maskShift),
@@ -73,18 +83,18 @@ final class HotkeyService: HotkeyServiceProtocol {
         switch action {
         case .start:
             DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?() }
-            return nil  // suppress bare Control from reaching other apps
+            return true  // suppress bare Control from reaching other apps
         case .end:
             DispatchQueue.main.async { [weak self] in self?.onRecordingEnded?() }
-            return nil
+            return true
         case .cancel:
             // Too short to transcribe — still stop capture so the mic is released
             DispatchQueue.main.async { [weak self] in self?.onRecordingCancelled?() }
-            return nil
+            return true
         case .suppress:
-            return nil
+            return true
         case .passThrough:
-            return Unmanaged.passUnretained(event)
+            return false
         }
     }
 }

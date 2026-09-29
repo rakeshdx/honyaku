@@ -72,21 +72,25 @@ The fix sits in the service, where the tap is owned, so every caller is protecte
 - **`TranscriptionPipeline`:** the disconnect closure captures `[weak self]` and hops to the main actor. If `status == .recording`, it calls `cancelRecording()`, then sets the existing disconnect error. The later key-up finds `status != .recording` and does nothing, which is now correct because capture has already stopped.
 - The next press starts a fresh `AVAudioEngine` input session on the current default device (see Decision 2).
 
-### 4. No end-of-clip trim for clips under one decoding window
+### 4. Shrink the end-of-clip trim only for clips too short to decode
 
-In WhisperKit's `TranscribeTask`, the decode loop runs `while seek < seekClipEnd - windowPadding`, where `windowPadding = windowClipTime × 16 kHz` (default 1.0 s).
-- **Clips shorter than one 30-second window:** the first and only pass decodes the whole clip. So the trim's only effect is to skip clips of 1 s or less entirely.
-- **Longer clips:** it stops a final sliver of a window from being decoded into invented text.
+In WhisperKit's `TranscribeTask`, the decode loop runs `while seek < seekClipEnd - windowPadding`, where `windowPadding = windowClipTime × 16 kHz` (default 1.0 s). A clip of 1 s or less therefore never reaches the decoder.
 
-`TranscriptionService` reads the clip's duration from the WAV file (`AVAudioFile.length / sampleRate`). A small pure helper, `decodeOptions(forDurationSeconds:)`, returns `DecodingOptions(windowClipTime: 0)` for clips under 30 s and the default options otherwise. `transcribe(audioPath:decodeOptions:)` is called with that result.
+After each pass, `SegmentSeeker` advances `seek` only to the last complete timestamp (`seek += lastTimestampSamples`). So even a clip under 30 s can take more than one pass. The trim is what stops a trailing sliver from being decoded on its own, which is where Whisper tends to invent words ("Thank you."). An earlier version of this design set `windowClipTime: 0` for every clip under 30 s. The re-review showed that exposed exactly that sliver, so it was narrowed.
+
+`decodeOptions(forDurationSeconds:)` now works like this:
+- **Clips under 1.1 s:** returns `DecodingOptions(windowClipTime: max(0, duration − 0.1))`. The first pass always runs (0 < 0.1 s), and a second pass would need more than `duration − 0.1` s left after the first timestamp, which can't realistically happen.
+- **Clips of 1.1 s or more:** returns nil, i.e. WhisperKit's defaults, unchanged from before this change.
+
+`TranscriptionService` reads the duration from the WAV (`AVAudioFile.length / sampleRate`).
 
 *Alternatives considered:*
-- **Pad short clips with trailing silence.** This needs a rewritten WAV, and the extra silence invites Whisper's typical invented endings ("Thank you.").
-- **Set `windowClipTime: 0` for every clip.** This would change decoding of recordings over 30 s, which isn't needed to fix this bug.
+- **Pad short clips with trailing silence.** This needs a rewritten WAV, and the silence invites the same invented words.
+- **`windowClipTime: 0` for all clips under 30 s.** Rejected by the re-review, as above.
 
 ### 5. Remove non-speech annotations in `TranscriptionService`
 
-A new `static func stripNonSpeech(_:)` removes every `\[[^\]]*\]` span, then clears the text if what's left is only a parenthesised span such as `(silence)`, then collapses whitespace. It is applied after `stripTokens` to both `rawText` and each timed segment, so diarisation merging never sees the labels. An empty result already follows the pipeline's existing silent-discard path (`TranscriptionPipeline.run`).
+A new `static func stripNonSpeech(_:)` removes every `\[[^\]]*\]` span, then clears the text if what's left is only a parenthesised span such as `(silence)`, then collapses whitespace. It is applied after `stripTokens` to each timed segment. `rawText` is then assembled from the cleaned segments (`assembleText(_:)`), so a segment that is only `(clears throat)` disappears even in the middle of a longer transcript. When WhisperKit returns no timed segments, the window text is cleaned the same way instead. An empty result already follows the pipeline's existing silent-discard path (`TranscriptionPipeline.run`).
 
 Whisper doesn't put dictated words in square brackets, so removing every bracketed span is safe. Parentheses can appear in real speech, so they're only dropped when they make up the whole segment.
 
@@ -100,7 +104,7 @@ Whisper doesn't put dictated words in square brackets, so removing every bracket
 1. Builds that path, using a small static helper that the tests can cover.
 2. Treats the model as downloaded when `AudioEncoder.mlmodelc`, `TextDecoder.mlmodelc` and `MelSpectrogram.mlmodelc` each contain a `coremldata.bin`. An interrupted download fails this check.
 3. If it's downloaded, creates `WhisperKit(WhisperKitConfig(model:, modelRepo:, modelFolder: <path>, download: false))`. With `modelFolder` set, WhisperKit skips `download()` entirely. The tokenizer already loads local-first from `~/Documents/huggingface/models/openai/<name>/tokenizer.json`, which setup downloaded.
-4. If it isn't downloaded, or the local load throws (for example a corrupt file), falls back to today's call, `WhisperKit(model:modelRepo:)`, which fetches the missing files.
+4. If it isn't downloaded, or the local load throws (for example a corrupt file), falls back to today's call, `WhisperKit(model:modelRepo:)`, which fetches the missing files. A local load failure is logged with its error type only (`com.honyaku.app` / `transcription`).
 
 *Alternative considered:* recording the download folder when setup finishes. Rejected: models downloaded by earlier builds wouldn't have that record, and the Hub layout already determines the path.
 
@@ -132,17 +136,21 @@ The new `CleanupService.defaultPrompt`:
 
 Saved user prompts in `UserDefaults["cleanupPrompt"]` are not touched. "Reset to Default" already uses `CleanupService.defaultPrompt`.
 
-*Alternative considered:* a code check that rejects cleanup output missing non-filler words from the raw text. Deferred: it would also reject legitimate false-start removal ("I was — I mean I went"), so it needs its own design.
+*Alternative considered:* relying on the prompt alone. Rejected after testing, see Decision 10.
 
 ### 10. Frame the transcript, then check the result in code
 
 - **Framing:** `CleanupService.clean` sends `Transcript to clean:\n"""\n<raw>\n"""` as the user message. The default prompt gains one rule: the transcript is not addressed to the model, and it must never answer it. `stripDelimiters(_:)` removes any echoed `"""` or wrapping quotes from the reply.
-- **Content check:** `keepsContent(raw:cleaned:)` lowercases both texts and removes the filler phrases ("you know", "sort of", "kind of") and single-word fillers (um, umm, uh, hmm, like, basically, literally, right, so) from the raw text. It then tokenises both into words (letters, digits, apostrophes), and requires every raw token to appear in the cleaned text at least as many times. `[Speaker N]` labels are ordinary tokens, so dropping one also fails the check.
-- **Fallback:** `removeUnambiguousFillers(_:)` strips `um|umm|uh|hmm` as whole words (with a trailing comma) and tidies the spacing.
+- **Faithfulness check:** `isFaithful(raw:cleaned:)` checks both directions.
+  - `required` = the words of the raw text after removing always-removable fillers (um/umm/uh/hmm) and set-off ambiguous fillers. An ambiguous filler (like, so, right, basically, literally, you know, sort of, kind of) is set off when followed by a comma and preceded by a comma or a sentence start.
+  - Every required word must appear in the cleaned text, at least as many times.
+  - Every cleaned word must appear in the full raw text, at least as many times, so the model can't add words.
+  - Tokens are lowercased runs of letters, digits and apostrophes, with ’ normalised to '. `[Speaker N]` labels are ordinary tokens.
+- **Fallback:** `removeUnambiguousFillers(_:)` strips `um|umm|uh|hmm` as whole words, but not inside hyphenated words like "uh-huh". It then tidies spacing and any leading punctuation left behind.
+- **Delimiters:** `stripDelimiters(_:)` also removes a leading `Cleaned:` label echoed from the examples. Wrapping quotes are removed only when there are no other quotes inside, so a dictated quotation survives.
+- **Worked examples:** the default prompt ends with two before/after examples. With rules alone, qwen-3b still returned "Are you working?" and "We should ship it." (dropping "I think"), so every case fell back to the raw text. With the examples, the fallback stopped firing. The integration tests now check the model's own output (`modelOutput(for:prompt:)`) against `isFaithful` directly, on held-out sentences that share no words with the examples, so a fallback can't mask a failure.
 
-- **Worked examples:** the default prompt ends with two before/after examples. With rules alone, qwen-3b still returned "Are you working?" and "We should ship it." (dropping "I think"), so every case fell back to the raw text. With the examples, its own output kept every word on the test sentences and on four held-out sentences that share no phrasing with the examples.
-
-All three are `static` and pure, so they're unit tested. The model itself is exercised by a new `HonyakuIntegrationTests/CleanupIntegrationTests.swift` (including held-out sentences), which runs only with `INTEGRATION_TESTS=1` and the selected cleanup model on disk.
+All three are `static` and pure, so they're unit tested. The model itself is exercised by `HonyakuIntegrationTests/CleanupIntegrationTests.swift`, which asserts on the raw model output, which runs only with `INTEGRATION_TESTS=1` and the selected cleanup model on disk.
 
 When the fallback is used it logs `Cleanup output dropped content words; using raw transcript` (subsystem `com.honyaku.app`, category `cleanup`). The transcript itself is never logged.
 
@@ -150,16 +158,35 @@ When the fallback is used it logs `Cleanup output dropped content words; using r
 
 ### 11. Warm models at launch, and load each model once
 
-`TranscriptionPipeline.warmUp()` runs from `startPipelineIfReady()` right after the pipeline is created, which is now at launch (Decision 7). It starts a background Task that awaits `transcription.prepare(modelID:)`, then `cleanup.prepare()` if cleanup is enabled. Errors are ignored, because a real dictation will surface them.
+`TranscriptionPipeline.warmUp()` runs from `startPipelineIfReady()` right after the pipeline is created, which is now at launch (Decision 7). It starts a background Task that awaits `transcription.prepareIfDownloaded(modelID:)`, then `cleanup.prepare()` if cleanup is enabled. The speech model is loaded only if it's already on disk, so warm-up never starts a download. The cleanup loader is local-only already. Errors are ignored, because a real dictation will surface them.
 
 Both services are actors whose loaders `await` inside, so a warm-up and a dictation could otherwise both start loading. Each loader therefore keeps the in-flight load as a `Task` keyed by model ID. Concurrent callers await the same task, and a failed task is cleared so the next call retries.
 
 **Memory:** qwen-3b (a few GB) now occupies memory from launch instead of from the first dictation. The developer accepted this.
 
+### 12. Disconnect while a dictation is in flight
+
+The disconnect handler now acts on the status:
+- `.recording`: cancel the recording, then show the error.
+- `.idle` or `.error`: show the error.
+- `.transcribing` or `.processing`: do nothing. The in-flight run owns the status, and overwriting it with `.error` made `isBusy` false, so the next press started a recording that the old run's status writes then clobbered, leaving the mic on.
+
+### 13. Re-enable the event tap and reconcile the press
+
+When `HotkeyService.handle` receives `.tapDisabledByTimeout` or `.tapDisabledByUserInput`, it:
+1. Calls `CGEvent.tapEnable(tap:enable: true)`.
+2. Reads the live modifier state with `CGEventSource.flagsState(.combinedSessionState)`.
+3. Feeds that state through `PushToTalkGesture.controlChanged` as if it were a flags event.
+
+If Control was released while the tap was off, the gesture returns `.end` or `.cancel` by hold duration, and the missed release is handled normally. If Control is still held, it returns `.suppress` and the recording continues.
+
 ## Risks / Trade-offs
 
+- **[Risk] The tap-disabled path can't be triggered by hand.** → The reconcile logic reuses the unit-tested gesture state machine; only the wiring is untested.
+- **[Trade-off] The strict faithfulness check rejects legitimate rewrites** (contractions, numbers written as digits, a false start removed). → Those cases paste the raw words minus um/uh/hmm, which errs toward keeping what was said.
+
 - **[Risk] SwiftUI might not run `.task` on a `MenuBarExtra` label at launch on some macOS versions.** → Verify on the developer's Mac by checking the event-tap list straight after launch. The popover `.onAppear` retry remains as a fallback.
-- **[Risk] A small model may still reword despite the prompt.** → Checked by hand with the "or not" example. The deferred code-level check is the stronger guarantee.
+- **[Risk] A small model may still reword despite the prompt.** → The faithfulness check (Decision 10) catches it and pastes the speaker's words instead.
 
 - **[Risk] A future WhisperKit or Hub version could store models somewhere else.** → The local check would then just fail, and loading falls back to today's fetch path. That costs speed and privacy, but nothing breaks.
 

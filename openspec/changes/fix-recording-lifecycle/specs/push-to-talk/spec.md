@@ -30,3 +30,16 @@ When setup is complete and Accessibility is granted, the system SHALL install th
 - **GIVEN** Honyaku launched without Accessibility
 - **WHEN** the user grants Accessibility and then opens the popover
 - **THEN** the listener is installed
+
+---
+
+### Requirement: The Control listener recovers when macOS disables it
+If macOS disables the event tap (by timeout or user input), the system SHALL re-enable it straight away. It SHALL then reconcile any press in progress with the current Control key state. If Control is no longer held, the press SHALL end exactly as a release would: transcribed if held for 300 ms or more, otherwise cancelled. The microphone SHALL NOT stay on because a release event was missed.
+
+#### Scenario: Tap disabled mid-hold, Control released while disabled
+- **WHEN** macOS disables the tap during a hold and the user releases Control before the tap is re-enabled
+- **THEN** on re-enable the recording is ended (transcribed or cancelled by duration) and the mic is released
+
+#### Scenario: Tap disabled mid-hold, Control still held
+- **WHEN** macOS disables the tap during a hold and Control is still held when it's re-enabled
+- **THEN** the recording continues, and the later release ends it normally

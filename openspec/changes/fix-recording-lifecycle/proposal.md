@@ -24,14 +24,15 @@ The pre-push `/review` of `fix/single-instance-accessibility` found three bugs i
 - A Control press that ends without a transcription (too short, or cut short) always stops capture, releases the mic and returns to idle.
 - The Control gesture logic moves into a small pure state machine that unit tests can cover. The stale-press reset never discards an active hold.
 - Starting capture never leaves a tap behind. A failed start removes it, and any leftover tap is removed before a new one is installed.
-- Recordings shorter than one 30-second decoding window are decoded without the end-of-clip trim, so short phrases are transcribed. Longer recordings keep WhisperKit's default trim.
+- Recordings too short to reach the decoder (under 1.1 s) get a smaller end-of-clip trim, so short phrases are transcribed. Longer recordings keep WhisperKit's defaults.
 - Whisper's non-speech annotations are removed before pasting; if nothing is left, the recording is treated as silence.
 - If the selected speech model is already on disk, it's loaded from the local folder with downloading turned off; it's fetched only when missing.
 - The Control listener is installed at launch when setup and Accessibility are ready; opening the popover still retries it.
 - The audio engine's input is prepared at launch and after every recording, without turning the mic on.
 - The default cleanup prompt keeps every word apart from fillers and false starts, and forbids rephrasing. A user-customised prompt is not changed.
-- The transcript is sent to the cleanup model inside delimiters. A code check rejects cleanup output that has lost any content word, and falls back to the raw text with only um/umm/uh/hmm removed.
-- The speech model, and the cleanup model if enabled, are loaded in the background at launch. A dictation during warm-up waits for that load.
+- The transcript is sent to the cleanup model inside delimiters. A code check rejects cleanup output that loses a content word or adds any word, and falls back to the raw text with only um/umm/uh/hmm removed.
+- The speech model, and the cleanup model if enabled, are loaded in the background at launch, but only if already on disk. A dictation during warm-up waits for that load.
+- A disconnect while a dictation is being transcribed no longer changes the status, and the event tap is re-enabled if macOS disables it. Both previously could leave the mic on (found in the re-review; already on `main`).
 - Disconnects of non-audio devices are ignored. If an audio input disconnects while a recording is running, that recording is cancelled (mic released, audio discarded) before the error is shown.
 
 ## Capabilities
@@ -56,10 +57,9 @@ The pre-push `/review` of `fix/single-instance-accessibility` found three bugs i
   - `Sources/Honyaku/Services/TranscriptionService.swift` (per-clip decoding options, annotation removal, local-first model loading)
   - `Sources/Honyaku/Services/PasteService.swift` (the ⌘V sender can be injected, so tests don't type into other apps)
   - `Sources/Honyaku/App/HonyakuApp.swift` (wires the cancel callback; starts the pipeline at launch)
-  - `Sources/Honyaku/Services/CleanupService.swift` (default prompt)
+  - `Sources/Honyaku/Services/CleanupService.swift` (default prompt, framing, faithfulness check and fallback, launch warm-up)
 - **Tests:** new `HonyakuTests/PushToTalkGestureTests.swift`, unit tests for the cleanup content check, a cleanup integration test using the downloaded model, plus unit tests for the decoding-option choice and for removing annotations. The AVAudioEngine paths are verified by hand.
 - **Out of scope** (flagged in the review, left for later):
-  - re-enabling the event tap after macOS disables it
   - the `pcmBuffers` cross-thread race
   - partial model downloads
   - SpeakerKit's own model check, and `ModelStore.isDownloaded` reporting every speech model as downloaded

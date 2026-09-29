@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: A downloaded speech model loads without network access
-When the selected speech model is already on disk, the system SHALL load it from the local folder and SHALL NOT contact any remote host, including metadata checks. Only when the model is missing SHALL the system fetch it from Hugging Face.
+When the selected speech model is already on disk, the system SHALL load it from the local folder and SHALL NOT contact any remote host, including metadata checks. Only when the model is missing, or the local copy fails to load, SHALL the system fetch it from Hugging Face. A local load failure SHALL be logged, without any transcript data.
 
 #### Scenario: First dictation after launch with the model on disk
 - **GIVEN** the selected Whisper model is already downloaded
