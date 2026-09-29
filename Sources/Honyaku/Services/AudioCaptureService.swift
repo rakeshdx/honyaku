@@ -40,16 +40,34 @@ final class AudioCaptureService {
         pcmBuffers.removeAll()
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
+        // A second tap on the same bus raises an exception, so clear any tap a failed run left behind
+        input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
             self?.pcmBuffers.append(buffer)
         }
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            input.removeTap(onBus: 0)
+            pcmBuffers.removeAll()
+            throw error
+        }
+    }
+
+    /// Sets up the input device ahead of the next press without starting audio input (the mic
+    /// indicator stays off). Otherwise the first press pays for creating the input and loses
+    /// the start of the first word. `engine.stop()` releases this, so each stop path calls it again.
+    func prepare() {
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else { return }
+        _ = engine.inputNode
+        engine.prepare()
     }
 
     /// Stops capture, tears down the tap, writes to a temp WAV file, returns its URL.
     func stopCaptureAndFlush() throws -> URL {
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)   // ← mic released here
+        prepare()
         return try writeTempWAV()
     }
 
@@ -59,6 +77,7 @@ final class AudioCaptureService {
     func stopCaptureAndFlushBoth() throws -> (url: URL, floatArray: [Float]) {
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)   // ← mic released here
+        prepare()
         let floats = extractFloatArray()
         let url = try writeTempWAV()
         return (url, floats)
@@ -69,6 +88,7 @@ final class AudioCaptureService {
         engine.stop()
         engine.inputNode.removeTap(onBus: 0)
         pcmBuffers.removeAll()
+        prepare()
     }
 
     // MARK: - Microphone enumeration
@@ -155,6 +175,8 @@ final class AudioCaptureService {
     }
 
     @objc private func handleDeviceChange(_ notification: Notification) {
+        // The notification fires for every AV device (webcams included); only audio inputs matter
+        guard let device = notification.object as? AVCaptureDevice, device.hasMediaType(.audio) else { return }
         onDeviceDisconnected?()
     }
 }

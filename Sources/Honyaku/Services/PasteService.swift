@@ -8,6 +8,12 @@ enum PasteError: Error {
 
 actor PasteService: PasteServiceProtocol {
     private let pasteboardClearDelaySeconds: Double = 5.0
+    private let sendPasteKeystroke: @Sendable () throws -> Void
+
+    /// `sendPasteKeystroke` defaults to a real ⌘V; tests inject a recorder so they never type into other apps.
+    init(sendPasteKeystroke: @escaping @Sendable () throws -> Void = PasteService.postCommandV) {
+        self.sendPasteKeystroke = sendPasteKeystroke
+    }
 
     func paste(_ text: String) async throws {
         let pasteboard = NSPasteboard.general
@@ -23,18 +29,12 @@ actor PasteService: PasteServiceProtocol {
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // Simulate ⌘V
-        let source = CGEventSource(stateID: .combinedSessionState)
-        let vKeyCode: CGKeyCode = 0x09  // kVK_ANSI_V
-        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
-              let keyUp   = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
+        do {
+            try sendPasteKeystroke()
+        } catch {
             await restorePasteboard(priorItems: priorItems)
-            throw PasteError.simulationFailed
+            throw error
         }
-        keyDown.flags = .maskCommand
-        keyUp.flags   = .maskCommand
-        keyDown.post(tap: .cgSessionEventTap)
-        keyUp.post(tap: .cgSessionEventTap)
 
         // Give the target app ~150ms to receive the paste before restoring clipboard
         try await Task.sleep(for: .milliseconds(150))
@@ -49,6 +49,20 @@ actor PasteService: PasteServiceProtocol {
         await MainActor.run {
             _ = NSPasteboard.general.clearContents()
         }
+    }
+
+    /// Simulates ⌘V into the frontmost app.
+    static func postCommandV() throws {
+        let source = CGEventSource(stateID: .combinedSessionState)
+        let vKeyCode: CGKeyCode = 0x09  // kVK_ANSI_V
+        guard let keyDown = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: true),
+              let keyUp   = CGEvent(keyboardEventSource: source, virtualKey: vKeyCode, keyDown: false) else {
+            throw PasteError.simulationFailed
+        }
+        keyDown.flags = .maskCommand
+        keyUp.flags   = .maskCommand
+        keyDown.post(tap: .cgSessionEventTap)
+        keyUp.post(tap: .cgSessionEventTap)
     }
 
     // MARK: - Private

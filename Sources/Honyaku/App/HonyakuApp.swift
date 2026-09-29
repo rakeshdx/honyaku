@@ -14,15 +14,20 @@ struct HonyakuApp: App {
     @State private var pipeline: TranscriptionPipeline?
 
     var body: some Scene {
-        MenuBarExtra("Honyaku", systemImage: menuBarIcon) {
+        MenuBarExtra {
             MenuBarPopoverView()
                 .environment(appState)
                 .environmentObject(permissionManager)
                 .environmentObject(transcriptStore)
+                // Retry for when Accessibility was granted after launch
                 .onAppear { startPipelineIfReady() }
                 .onChange(of: appState.setupComplete) { _, done in
                     if done { startPipelineIfReady() }
                 }
+        } label: {
+            // The label renders at launch (the popover only on click), so push-to-talk works without opening it
+            Image(systemName: menuBarIcon)
+                .task { startPipelineIfReady() }
         }
         .menuBarExtraStyle(.window)
 
@@ -97,6 +102,8 @@ struct HonyakuApp: App {
     @MainActor
     private func startPipelineIfReady() {
         guard appState.setupComplete else { return }
+        // Unit tests are hosted in the app; a test run must not add a second Control listener or load models
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
 
         // Create the pipeline once
         if pipeline == nil {
@@ -104,7 +111,9 @@ struct HonyakuApp: App {
             pipeline = p
             hotkeyService.onRecordingStarted = { p.startRecording() }
             hotkeyService.onRecordingEnded   = { p.stopRecordingAndProcess() }
+            hotkeyService.onRecordingCancelled = { p.cancelRecording() }
             hotkeyService.setPipelineBusyCheck { appState.status.isBusy }
+            p.warmUp()
         }
 
         // Attempt to start the hotkey tap — retry on every popover open in case

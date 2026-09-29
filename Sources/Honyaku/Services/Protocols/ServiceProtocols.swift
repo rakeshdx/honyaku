@@ -23,6 +23,7 @@ protocol DiarizationServiceProtocol: Sendable {
 protocol HotkeyServiceProtocol: AnyObject {
     var onRecordingStarted: (() -> Void)? { get set }
     var onRecordingEnded: (() -> Void)? { get set }
+    var onRecordingCancelled: (() -> Void)? { get set }
     func start() throws
     func stop()
 }
