@@ -1,0 +1,8 @@
+// Debug signing. Ad-hoc by default so the project builds without an Apple ID —
+// but macOS then forgets the Accessibility grant on every rebuild.
+// For a stable signature, copy Local.xcconfig.example to Local.xcconfig and set your team ID.
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = -
+DEVELOPMENT_TEAM =
+
+#include? "Local.xcconfig"

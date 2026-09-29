@@ -125,11 +125,20 @@ struct OnboardingView: View {
 }
 
 extension NSApplication {
+    /// Quits, then starts a fresh instance once this process has fully exited.
+    /// A detached shell waits on our PID; `open` while we're still running would
+    /// just re-activate this process instead of launching a new one.
     func relaunch() {
         let task = Process()
-        task.launchPath = "/usr/bin/open"
-        task.arguments = [Bundle.main.bundlePath]
-        task.launch()
+        task.executableURL = URL(fileURLWithPath: "/bin/sh")
+        task.arguments = [
+            "-c",
+            "while kill -0 \"$1\" 2>/dev/null; do sleep 0.2; done; /usr/bin/open -n \"$2\"",
+            "relaunch",  // $0
+            String(ProcessInfo.processInfo.processIdentifier),
+            Bundle.main.bundlePath,
+        ]
+        guard (try? task.run()) != nil else { return }
         terminate(nil)
     }
 }

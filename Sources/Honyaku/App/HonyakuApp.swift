@@ -9,6 +9,7 @@ struct HonyakuApp: App {
     @State private var appState = AppState()
 
     private let hotkeyService = HotkeyService()
+    private let singleInstanceService = SingleInstanceService()
     // Pipeline is created once setup is complete; nil until then.
     @State private var pipeline: TranscriptionPipeline?
 
@@ -70,6 +71,9 @@ struct HonyakuApp: App {
             "diarizationEnabled": false,
         ])
 
+        // Newest instance wins: quit any older copies before this one installs its event tap
+        singleInstanceService.start()
+
         // Clean up any orphaned temp audio files from a previous crash
         TranscriptionService.cleanupOrphanedTempFiles()
 
@@ -106,11 +110,15 @@ struct HonyakuApp: App {
         // Attempt to start the hotkey tap — retry on every popover open in case
         // accessibility was granted after the previous attempt (requires relaunch in practice)
         guard !AXIsProcessTrusted() else {
-            do {
-                try hotkeyService.start()
-                appState.clearError()
-            } catch {
-                appState.setError("Hotkey registration failed: \(error.localizedDescription). Try relaunching.")
+            Task {
+                // Never install a second tap while an older instance still holds one
+                await singleInstanceService.waitUntilResolved()
+                do {
+                    try hotkeyService.start()
+                    appState.clearError()
+                } catch {
+                    appState.setError("Hotkey registration failed: \(error.localizedDescription). Try relaunching.")
+                }
             }
             return
         }
@@ -120,6 +128,9 @@ struct HonyakuApp: App {
     // MARK: - Login item
 
     private func registerLoginItemIfNeeded() {
+        #if DEBUG
+        // Debug builds run from DerivedData; never make them launch at login
+        #else
         guard !UserDefaults.standard.bool(forKey: "loginItemRegistered") else { return }
         do {
             try SMAppService.mainApp.register()
@@ -127,6 +138,7 @@ struct HonyakuApp: App {
         } catch {
             // Non-fatal; user can enable manually in Settings
         }
+        #endif
     }
 
     // MARK: - Quit cleanup (P1-E / privacy spec)

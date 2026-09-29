@@ -24,6 +24,9 @@ targets:
       - path: Sources/Honyaku
     resources:
       - Sources/Resources/PrivacyInfo.xcprivacy
+    # Debug signing comes from the xcconfig (optionally overridden by git-ignored Config/Local.xcconfig)
+    configFiles:
+      Debug: Config/Debug.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.honyaku.app
@@ -34,9 +37,11 @@ targets:
         ENABLE_APP_SANDBOX: NO
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_STYLE: Manual
-        CODE_SIGN_IDENTITY: "-"
-        DEVELOPMENT_TEAM: ""
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: "-"
+          DEVELOPMENT_TEAM: ""
     dependencies:
       - package: WhisperKit
         product: WhisperKit
@@ -51,6 +56,9 @@ targets:
     type: bundle.unit-test
     platform: macOS
     deploymentTarget: "14.0"
+    # Hosted in the app: must be signed like it or hardened runtime rejects the bundle
+    configFiles:
+      Debug: Config/Debug.xcconfig
     sources:
       - path: HonyakuTests
     settings:
@@ -66,6 +74,9 @@ targets:
     type: bundle.unit-test
     platform: macOS
     deploymentTarget: "14.0"
+    # Hosted in the app: must be signed like it or hardened runtime rejects the bundle
+    configFiles:
+      Debug: Config/Debug.xcconfig
     sources:
       - path: HonyakuIntegrationTests
     resources:
@@ -90,7 +101,45 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.honyaku.ui-tests
+        GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
     dependencies:
       - target: Honyaku
+
+# Coverage stays off: instrumented builds fail to link the yyjson package framework
+# (Undefined symbol ___llvm_profile_runtime).
+schemes:
+  Honyaku:
+    build:
+      targets:
+        Honyaku: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - HonyakuTests
+    archive:
+      config: Release
+
+  HonyakuTests:
+    build:
+      targets:
+        HonyakuTests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - HonyakuTests
+
+  HonyakuIntegrationTests:
+    build:
+      targets:
+        HonyakuIntegrationTests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - HonyakuIntegrationTests

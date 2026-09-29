@@ -1,4 +1,5 @@
 import XCTest
+import WhisperKit
 @testable import Honyaku
 
 final class DiarizationIntegrationTests: IntegrationTestBase {
@@ -6,7 +7,8 @@ final class DiarizationIntegrationTests: IntegrationTestBase {
     func testTwoSpeakersFixtureProducesAtLeastTwoSpeakerIDs() async throws {
         let audioURL = try fixtureURL(named: "two_speakers.wav")
         let service = DiarizationService()
-        let segments = try await service.diarize(audioURL: audioURL)
+        let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+        let segments = try await service.diarize(audioArray: audio)
         let speakerIDs = Set(segments.map(\.speakerID))
         XCTAssertGreaterThanOrEqual(speakerIDs.count, 2,
                                     "two_speakers.wav should produce ≥2 distinct speaker IDs")
@@ -15,7 +17,8 @@ final class DiarizationIntegrationTests: IntegrationTestBase {
     func testSingleSpeakerFixtureProducesNoLabelsOrOneLabel() async throws {
         let audioURL = try fixtureURL(named: "single_speaker.wav")
         let service = DiarizationService()
-        let segments = try await service.diarize(audioURL: audioURL)
+        let audio = try AudioProcessor.loadAudioAsFloatArray(fromPath: audioURL.path)
+        let segments = try await service.diarize(audioArray: audio)
         let speakerIDs = Set(segments.map(\.speakerID))
         XCTAssertLessThanOrEqual(speakerIDs.count, 1,
                                   "single_speaker.wav should produce ≤1 distinct speaker ID")
