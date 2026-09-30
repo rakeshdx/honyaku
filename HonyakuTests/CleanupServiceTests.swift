@@ -99,4 +99,16 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertEqual(CleanupService.stripDelimiters("\"Hello.\""), "Hello.")
         XCTAssertEqual(CleanupService.stripDelimiters("\"Hi,\" she said \"bye.\""), "\"Hi,\" she said \"bye.\"")
     }
+
+    // MARK: Latency guards
+
+    func testOutputCapScalesWithInputAndIsBounded() {
+        XCTAssertGreaterThan(CleanupService.outputTokenLimit(for: "send it"), 32)
+        XCTAssertLessThan(CleanupService.outputTokenLimit(for: "send it"), 64)
+        XCTAssertEqual(CleanupService.outputTokenLimit(for: String(repeating: "word ", count: 2_000)), 512)
+    }
+
+    func testReasoningIsNeverPasted() {
+        XCTAssertEqual(CleanupService.stripDelimiters("<think>\nThe user said…\n</think>\n\nSend it."), "Send it.")
+    }
 }

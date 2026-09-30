@@ -10,7 +10,10 @@
 		049A166A64C3B5FC3217EA3E /* ServiceProtocols.swift in Sources */ = {isa = PBXBuildFile; fileRef = A74BA4419D0A6AF4134D24EB /* ServiceProtocols.swift */; };
 		066EC141C3171A1C5B6DB6E8 /* AudioCaptureService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7880787C7E8CD6744274D933 /* AudioCaptureService.swift */; };
 		08921E27BFD76F47EAD8560B /* HonyakuApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6A2D280C5A741F21D141381 /* HonyakuApp.swift */; };
+		187AC80FCDF15B0DEA28264C /* ModelInstaller.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3CABA4C3A063A82110592849 /* ModelInstaller.swift */; };
 		1A8EA159DDF0C7D01B169C86 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF69E098890F20F841BEF94 /* KeychainService.swift */; };
+		22C69CA52FC92706B1559898 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 95B121AA1368FBA8A8FE8CB3 /* FluidAudio */; };
+		23982B39C001A7E60D34FAB5 /* SpeechEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38A2F1BE09E0FE0A9DDAF292 /* SpeechEngine.swift */; };
 		23B30496629B70A530003765 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 1DC3354B9B3F2DFE29B3C1F0 /* WhisperKit */; };
 		29331628FB46AFE38CB50ED0 /* IntegrationTestBase.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55E8F9A4BA205025B2D191C /* IntegrationTestBase.swift */; };
 		2B8F2D137095BDAF7A9C7964 /* TranscriptionServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C118FABBD260C3626AF1A284 /* TranscriptionServiceTests.swift */; };
@@ -18,10 +21,13 @@
 		2FF14EA119D7B90ACA24C5A8 /* CleanupIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB5C27B9752C3DB5955E093D /* CleanupIntegrationTests.swift */; };
 		365A191199A8125B2E6404D4 /* ModelStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 61F172FEB18DC9B3D083562C /* ModelStore.swift */; };
 		3B732BC088AAF238A9540D7F /* SpeakerSegment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2EEA5ABED8EDE2CFD2F24ABE /* SpeakerSegment.swift */; };
+		3E3D5F773D94BF15F4F56DA1 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = B5B0F02D7A95346CBF78C620 /* MLX */; };
 		416152D35FC4393FDDC2CE7A /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C99CE8912C0EB663CD68C9B0 /* HotkeyService.swift */; };
 		41F9DE4191725ECF4E376EDB /* TranscriptionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93AB4C017207BC645E2B109E /* TranscriptionService.swift */; };
 		43F859F60A7E86C4E8819F7F /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = 2D6D9362E6F2CCB39F6A3738 /* MLXLLM */; };
 		49185DA640262C9C8264D6EC /* SingleInstanceServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACB5B9D5F7FAED8A347F2C8B /* SingleInstanceServiceTests.swift */; };
+		4E3C8FB2A88E897CEF3B1DB9 /* ModelInstallerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6108744515D3360F23E149A8 /* ModelInstallerTests.swift */; };
+		5231857A61F51EB803C71531 /* ParakeetEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = ACFE896F6EC34F817BD66157 /* ParakeetEngine.swift */; };
 		537E0F0522232397144CE051 /* PushToTalkGestureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D74849FBE28330947E121FAC /* PushToTalkGestureTests.swift */; };
 		60993BB771B68FA6266F1581 /* TranscriptStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B0138529CE4C8D50F52201D8 /* TranscriptStoreTests.swift */; };
 		65FD8D1BC0BCA1F3DFBF6BEA /* CleanupServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20814B485D3D0539C3F608AD /* CleanupServiceTests.swift */; };
@@ -34,6 +40,7 @@
 		8DD7513BF6CC4DFC54DFA4EC /* ModelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FADEBDEBEF5B31404040B2 /* ModelInfo.swift */; };
 		8FD08101AC880370D53603E5 /* ModelRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38488E782725D0616D41E92E /* ModelRegistry.swift */; };
 		90224F430A7285766CAB031E /* PipelineOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF1407837A235C2A6CC930D /* PipelineOrderingTests.swift */; };
+		9B66EB0DB92E179D4B8EDBF4 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 69015C35BE8A491B32780EDF /* FluidAudio */; };
 		A487418403074B0D4B471E0C /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CFC06FF839977DCFDEE2EFB7 /* OnboardingView.swift */; };
 		A9535B5D50EA0593C9BD61B1 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F329BCEF7214AACD95ED1C95 /* PermissionManager.swift */; };
 		AA8C3D3D0BCC347132D172DA /* PasteServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8469EA80F9B9C7FBDD532AF7 /* PasteServiceTests.swift */; };
@@ -42,8 +49,12 @@
 		B03EE0FA66EA3E958F5BB886 /* MenuBarPopoverView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36529057270B2C549B152B89 /* MenuBarPopoverView.swift */; };
 		B3B5D2A8A966A589DF707322 /* DiarizationIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6EE13AC04B231794090E185 /* DiarizationIntegrationTests.swift */; };
 		B51EEF0734648F3ED1176F58 /* TranscriptionIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED5F76025E88CFDF11D0CEF /* TranscriptionIntegrationTests.swift */; };
+		B6E88A54F8E8D4C3DCF3077B /* ModelRegistryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9EB9167EE7B4F27259A9091 /* ModelRegistryTests.swift */; };
+		C27CDFE0A9EFE69005A57C17 /* WhisperKitEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F904936BE94770CAC188DDAF /* WhisperKitEngine.swift */; };
+		C40E993167FE70BE8EB505E3 /* ParakeetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A33B4A9D2DD23505B6F6B16 /* ParakeetEngineTests.swift */; };
 		C6B4D5352FC6E6F359C9E01D /* CleanupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AD0AFFCE09D97153A57908 /* CleanupService.swift */; };
 		C7B69514F08B7020474EFEDC /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = BA58CD77C6ACD9A9913F0561 /* MLXLMCommon */; };
+		D1FE8F7956E20A790010F1FC /* ModelBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BFB58638D97937C8433243F /* ModelBenchmarkTests.swift */; };
 		D6AAC2272D7FD199FB76E31A /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5037D1267461BD4C8CB3133A /* TranscriptStore.swift */; };
 		DA2387ED0031DAD6E709D402 /* DiarizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7164FEEB539FA3D90612E4 /* DiarizationService.swift */; };
 		DB70FE3E86A52E2EB49EDEFF /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098B82AAFBDAFCBF79C63CAF /* ModelDownloader.swift */; };
@@ -85,15 +96,20 @@
 		1EF69E098890F20F841BEF94 /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		20814B485D3D0539C3F608AD /* CleanupServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupServiceTests.swift; sourceTree = "<group>"; };
 		20FADEBDEBEF5B31404040B2 /* ModelInfo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelInfo.swift; sourceTree = "<group>"; };
+		2BFB58638D97937C8433243F /* ModelBenchmarkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelBenchmarkTests.swift; sourceTree = "<group>"; };
 		2EEA5ABED8EDE2CFD2F24ABE /* SpeakerSegment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerSegment.swift; sourceTree = "<group>"; };
 		2F99A4BB65143E8992ABC3C3 /* SingleInstanceService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingleInstanceService.swift; sourceTree = "<group>"; };
 		36529057270B2C549B152B89 /* MenuBarPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarPopoverView.swift; sourceTree = "<group>"; };
 		3815F419E6149EE66A738839 /* MenuBarUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarUITests.swift; sourceTree = "<group>"; };
 		38488E782725D0616D41E92E /* ModelRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelRegistry.swift; sourceTree = "<group>"; };
+		38A2F1BE09E0FE0A9DDAF292 /* SpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechEngine.swift; sourceTree = "<group>"; };
+		3CABA4C3A063A82110592849 /* ModelInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelInstaller.swift; sourceTree = "<group>"; };
+		4A33B4A9D2DD23505B6F6B16 /* ParakeetEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngineTests.swift; sourceTree = "<group>"; };
 		5037D1267461BD4C8CB3133A /* TranscriptStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStore.swift; sourceTree = "<group>"; };
 		5B00031D1D68152EEA445A12 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		5ED5F76025E88CFDF11D0CEF /* TranscriptionIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionIntegrationTests.swift; sourceTree = "<group>"; };
 		5FF1407837A235C2A6CC930D /* PipelineOrderingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PipelineOrderingTests.swift; sourceTree = "<group>"; };
+		6108744515D3360F23E149A8 /* ModelInstallerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelInstallerTests.swift; sourceTree = "<group>"; };
 		61F172FEB18DC9B3D083562C /* ModelStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelStore.swift; sourceTree = "<group>"; };
 		6918104DEB9040B693339214 /* TranscriptEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptEntry.swift; sourceTree = "<group>"; };
 		69AD0AFFCE09D97153A57908 /* CleanupService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CleanupService.swift; sourceTree = "<group>"; };
@@ -105,8 +121,10 @@
 		93AB4C017207BC645E2B109E /* TranscriptionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionService.swift; sourceTree = "<group>"; };
 		A66A4EA2D911AA4D16799AC2 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		A74BA4419D0A6AF4134D24EB /* ServiceProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceProtocols.swift; sourceTree = "<group>"; };
+		A9EB9167EE7B4F27259A9091 /* ModelRegistryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelRegistryTests.swift; sourceTree = "<group>"; };
 		AC2CE35BC618354D54B90D40 /* HonyakuTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HonyakuTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		ACB5B9D5F7FAED8A347F2C8B /* SingleInstanceServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SingleInstanceServiceTests.swift; sourceTree = "<group>"; };
+		ACFE896F6EC34F817BD66157 /* ParakeetEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetEngine.swift; sourceTree = "<group>"; };
 		B0138529CE4C8D50F52201D8 /* TranscriptStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptStoreTests.swift; sourceTree = "<group>"; };
 		B1738FDD083A43E230D7320A /* NetworkAuditDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkAuditDelegate.swift; sourceTree = "<group>"; };
 		B6A2D280C5A741F21D141381 /* HonyakuApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HonyakuApp.swift; sourceTree = "<group>"; };
@@ -129,6 +147,7 @@
 		F2076911DD6ACFFFA3133984 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		F329BCEF7214AACD95ED1C95 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
 		F59C44AAB42D6A48B1CBAF31 /* HonyakuUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = HonyakuUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F904936BE94770CAC188DDAF /* WhisperKitEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitEngine.swift; sourceTree = "<group>"; };
 		FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -138,6 +157,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				84CDD4F7DE25C1A7D0F8AF76 /* WhisperKit in Frameworks */,
+				9B66EB0DB92E179D4B8EDBF4 /* FluidAudio in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -149,6 +169,8 @@
 				DDFF36075D1001D5ADD71CDC /* SpeakerKit in Frameworks */,
 				43F859F60A7E86C4E8819F7F /* MLXLLM in Frameworks */,
 				C7B69514F08B7020474EFEDC /* MLXLMCommon in Frameworks */,
+				22C69CA52FC92706B1559898 /* FluidAudio in Frameworks */,
+				3E3D5F773D94BF15F4F56DA1 /* MLX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -178,6 +200,9 @@
 				FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */,
 				DFF9B8EA7D4E1749EF3C27D9 /* Info.plist */,
 				7CB3FF8431F439F227B38078 /* ModelDownloaderTests.swift */,
+				6108744515D3360F23E149A8 /* ModelInstallerTests.swift */,
+				A9EB9167EE7B4F27259A9091 /* ModelRegistryTests.swift */,
+				4A33B4A9D2DD23505B6F6B16 /* ParakeetEngineTests.swift */,
 				8469EA80F9B9C7FBDD532AF7 /* PasteServiceTests.swift */,
 				5FF1407837A235C2A6CC930D /* PipelineOrderingTests.swift */,
 				D74849FBE28330947E121FAC /* PushToTalkGestureTests.swift */,
@@ -207,6 +232,7 @@
 				C6EE13AC04B231794090E185 /* DiarizationIntegrationTests.swift */,
 				A66A4EA2D911AA4D16799AC2 /* Info.plist */,
 				E55E8F9A4BA205025B2D191C /* IntegrationTestBase.swift */,
+				2BFB58638D97937C8433243F /* ModelBenchmarkTests.swift */,
 				5ED5F76025E88CFDF11D0CEF /* TranscriptionIntegrationTests.swift */,
 			);
 			path = HonyakuIntegrationTests;
@@ -229,15 +255,19 @@
 				C99CE8912C0EB663CD68C9B0 /* HotkeyService.swift */,
 				1EF69E098890F20F841BEF94 /* KeychainService.swift */,
 				098B82AAFBDAFCBF79C63CAF /* ModelDownloader.swift */,
+				3CABA4C3A063A82110592849 /* ModelInstaller.swift */,
 				38488E782725D0616D41E92E /* ModelRegistry.swift */,
 				61F172FEB18DC9B3D083562C /* ModelStore.swift */,
 				B1738FDD083A43E230D7320A /* NetworkAuditDelegate.swift */,
+				ACFE896F6EC34F817BD66157 /* ParakeetEngine.swift */,
 				D6E45E968DE63F2C4790A010 /* PasteService.swift */,
 				F329BCEF7214AACD95ED1C95 /* PermissionManager.swift */,
 				DCD865C96E716005231002CE /* PushToTalkGesture.swift */,
 				2F99A4BB65143E8992ABC3C3 /* SingleInstanceService.swift */,
+				38A2F1BE09E0FE0A9DDAF292 /* SpeechEngine.swift */,
 				93AB4C017207BC645E2B109E /* TranscriptionService.swift */,
 				5037D1267461BD4C8CB3133A /* TranscriptStore.swift */,
+				F904936BE94770CAC188DDAF /* WhisperKitEngine.swift */,
 				01849C45560D8E4905FB9A3E /* Protocols */,
 			);
 			path = Services;
@@ -368,6 +398,7 @@
 			name = HonyakuIntegrationTests;
 			packageProductDependencies = (
 				6ABAFD44C29F179B8B2E55E8 /* WhisperKit */,
+				69015C35BE8A491B32780EDF /* FluidAudio */,
 			);
 			productName = HonyakuIntegrationTests;
 			productReference = D840E374AB63FA153B6C9FB2 /* HonyakuIntegrationTests.xctest */;
@@ -390,6 +421,8 @@
 				F21FC78D7D330656D929FB71 /* SpeakerKit */,
 				2D6D9362E6F2CCB39F6A3738 /* MLXLLM */,
 				BA58CD77C6ACD9A9913F0561 /* MLXLMCommon */,
+				95B121AA1368FBA8A8FE8CB3 /* FluidAudio */,
+				B5B0F02D7A95346CBF78C620 /* MLX */,
 			);
 			productName = Honyaku;
 			productReference = F0C1C41D77BF1178238E6FB1 /* Honyaku.app */;
@@ -423,7 +456,9 @@
 			mainGroup = 8B0828A9ADC0B0EDE0ADE394;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
+				813E4B34ECDAAFB18EC60944 /* XCRemoteSwiftPackageReference "FluidAudio" */,
 				B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */,
+				E3506DCF39C06C1A88864C93 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 				FF2AEBA83D4E9AF74C3D6286 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 			);
 			preferredProjectObjectVersion = 77;
@@ -447,6 +482,9 @@
 				65FD8D1BC0BCA1F3DFBF6BEA /* CleanupServiceTests.swift in Sources */,
 				AC9775274A6F0D13F165A308 /* HotkeyServiceTests.swift in Sources */,
 				8006DBB6F5331A8B3C7BBB53 /* ModelDownloaderTests.swift in Sources */,
+				4E3C8FB2A88E897CEF3B1DB9 /* ModelInstallerTests.swift in Sources */,
+				B6E88A54F8E8D4C3DCF3077B /* ModelRegistryTests.swift in Sources */,
+				C40E993167FE70BE8EB505E3 /* ParakeetEngineTests.swift in Sources */,
 				AA8C3D3D0BCC347132D172DA /* PasteServiceTests.swift in Sources */,
 				90224F430A7285766CAB031E /* PipelineOrderingTests.swift in Sources */,
 				537E0F0522232397144CE051 /* PushToTalkGestureTests.swift in Sources */,
@@ -464,6 +502,7 @@
 				2FF14EA119D7B90ACA24C5A8 /* CleanupIntegrationTests.swift in Sources */,
 				B3B5D2A8A966A589DF707322 /* DiarizationIntegrationTests.swift in Sources */,
 				29331628FB46AFE38CB50ED0 /* IntegrationTestBase.swift in Sources */,
+				D1FE8F7956E20A790010F1FC /* ModelBenchmarkTests.swift in Sources */,
 				B51EEF0734648F3ED1176F58 /* TranscriptionIntegrationTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -491,10 +530,12 @@
 				B03EE0FA66EA3E958F5BB886 /* MenuBarPopoverView.swift in Sources */,
 				DB70FE3E86A52E2EB49EDEFF /* ModelDownloader.swift in Sources */,
 				8DD7513BF6CC4DFC54DFA4EC /* ModelInfo.swift in Sources */,
+				187AC80FCDF15B0DEA28264C /* ModelInstaller.swift in Sources */,
 				8FD08101AC880370D53603E5 /* ModelRegistry.swift in Sources */,
 				365A191199A8125B2E6404D4 /* ModelStore.swift in Sources */,
 				66A6F791FF282997419EF808 /* NetworkAuditDelegate.swift in Sources */,
 				A487418403074B0D4B471E0C /* OnboardingView.swift in Sources */,
+				5231857A61F51EB803C71531 /* ParakeetEngine.swift in Sources */,
 				776877AFAB943E1FAD37D69B /* PasteService.swift in Sources */,
 				A9535B5D50EA0593C9BD61B1 /* PermissionManager.swift in Sources */,
 				F314B350F9C3ED465B5F5A8B /* PushToTalkGesture.swift in Sources */,
@@ -503,10 +544,12 @@
 				6CA4A7FDEF537F3C687D737D /* SetupWizardView.swift in Sources */,
 				AFDF6A7743610C1495578BA2 /* SingleInstanceService.swift in Sources */,
 				3B732BC088AAF238A9540D7F /* SpeakerSegment.swift in Sources */,
+				23982B39C001A7E60D34FAB5 /* SpeechEngine.swift in Sources */,
 				2DAF325FD12CAD5EAF50E04F /* TranscriptEntry.swift in Sources */,
 				D6AAC2272D7FD199FB76E31A /* TranscriptStore.swift in Sources */,
 				DFD80E80AE4CB494BD3D8451 /* TranscriptionPipeline.swift in Sources */,
 				41F9DE4191725ECF4E376EDB /* TranscriptionService.swift in Sources */,
+				C27CDFE0A9EFE69005A57C17 /* WhisperKitEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -861,12 +904,28 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		813E4B34ECDAAFB18EC60944 /* XCRemoteSwiftPackageReference "FluidAudio" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/FluidInference/FluidAudio";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.17.4;
+			};
+		};
 		B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/argmaxinc/WhisperKit";
 			requirement = {
 				kind = upToNextMajorVersion;
 				minimumVersion = 0.9.0;
+			};
+		};
+		E3506DCF39C06C1A88864C93 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 0.30.6;
 			};
 		};
 		FF2AEBA83D4E9AF74C3D6286 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */ = {
@@ -890,10 +949,25 @@
 			package = FF2AEBA83D4E9AF74C3D6286 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLLM;
 		};
+		69015C35BE8A491B32780EDF /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 813E4B34ECDAAFB18EC60944 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
 		6ABAFD44C29F179B8B2E55E8 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = B4C1AD4FAD88DB13773DA328 /* XCRemoteSwiftPackageReference "WhisperKit" */;
 			productName = WhisperKit;
+		};
+		95B121AA1368FBA8A8FE8CB3 /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 813E4B34ECDAAFB18EC60944 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
+		B5B0F02D7A95346CBF78C620 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E3506DCF39C06C1A88864C93 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
 		};
 		BA58CD77C6ACD9A9913F0561 /* MLXLMCommon */ = {
 			isa = XCSwiftPackageProductDependency;

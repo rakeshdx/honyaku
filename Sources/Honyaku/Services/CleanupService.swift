@@ -1,7 +1,8 @@
 import Foundation
+import MLX
 import MLXLLM
-import os
 import MLXLMCommon
+import os
 
 enum CleanupError: Error {
     case timedOut
@@ -11,6 +12,14 @@ enum CleanupError: Error {
 actor CleanupService: CleanupServiceProtocol {
     private var loadedModelID: String?
     private var container: ModelContainer?
+    private var loadedInfo: ModelInfo?
+    private let promptCache = PromptPrefixCache()
+    /// Pins one model instead of following the user's selection (benchmarks compare tiers side by side).
+    private let fixedModelID: String?
+
+    init(modelID: String? = nil) {
+        fixedModelID = modelID
+    }
     // In-flight load, so a launch warm-up and a dictation never load the model twice
     private var loading: (modelID: String, task: Task<ModelContainer, Error>)?
     private let timeoutSeconds: Double = 60
@@ -37,11 +46,13 @@ actor CleanupService: CleanupServiceProtocol {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return rawText
         }
-        let model = try await loadModel()
+        let (model, info) = try await loadModel()
+        let promptCache = self.promptCache
 
         return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
-                let cleaned = try await CleanupService.modelOutput(for: rawText, prompt: prompt, model: model)
+                let cleaned = try await CleanupService.modelOutput(
+                    for: rawText, prompt: prompt, model: model, info: info, reuse: promptCache)
                 if cleaned.isEmpty { return rawText }
                 // Never trust the model with the user's words: if it lost or added any, keep theirs
                 guard CleanupService.isFaithful(raw: rawText, cleaned: cleaned) else {
@@ -64,15 +75,72 @@ actor CleanupService: CleanupServiceProtocol {
     /// The model's cleaned text before the faithfulness check. Integration tests use it so the
     /// fallback can't hide a model that drops or adds words.
     func modelOutput(for rawText: String, prompt: String) async throws -> String {
-        try await CleanupService.modelOutput(for: rawText, prompt: prompt, model: loadModel())
+        let (model, info) = try await loadModel()
+        return try await CleanupService.modelOutput(for: rawText, prompt: prompt, model: model, info: info,
+                                                    reuse: promptCache)
     }
 
-    private static func modelOutput(for rawText: String, prompt: String, model: ModelContainer) async throws -> String {
-        // Create a fresh session per call so history doesn't accumulate
-        let session = ChatSession(model, instructions: prompt, generateParameters: .init(temperature: 0.0))
-        // Framed as data: a bare question like "Are you working or not?" otherwise gets answered or rewritten
-        let response = try await session.respond(to: "Transcript to clean:\n\"\"\"\n\(rawText)\n\"\"\"")
+    private static func modelOutput(for rawText: String, prompt: String, model: ModelContainer,
+                                    info: ModelInfo, reuse: PromptPrefixCache) async throws -> String {
+        // Qwen3 reasons before answering unless its chat template is told not to
+        let templateContext: [String: any Sendable]? = info.disablesThinking ? ["enable_thinking": false] : nil
+        let parameters = GenerateParameters(maxTokens: outputTokenLimit(for: rawText), temperature: 0)
+        let cacheKey = "\(info.id)\n\(info.disablesThinking)\n\(prompt)"
+
+        let response: String = try await model.perform { context in
+            func tokens(for transcript: String) async throws -> [Int] {
+                let input = UserInput(chat: [.system(prompt), .user(frame(transcript))], additionalContext: templateContext)
+                return try await context.processor.prepare(input: input).text.tokens.asArray(Int.self)
+            }
+            let full = try await tokens(for: rawText)
+
+            if reuse.key != cacheKey {
+                // The part every dictation shares: the system prompt and the user turn's opening markup
+                let (a, b) = (try await tokens(for: "a"), try await tokens(for: "b"))
+                reuse.prefix = zip(a, b).prefix { $0 == $1 }.map(\.0)
+                reuse.cache = nil
+                reuse.key = cacheKey
+            }
+
+            // Reuse the system prompt's key/value cache so each dictation only processes its own words
+            let prefix = reuse.prefix
+            var cache: [KVCache]
+            var input = full
+            if let primed = reuse.cache, !prefix.isEmpty, full.count > prefix.count,
+               full.starts(with: prefix), primed.first?.offset == prefix.count {
+                cache = primed
+                input = Array(full[prefix.count...])
+            } else {
+                cache = context.model.newCache(parameters: parameters)
+            }
+            reuse.cache = nil  // held again below only once it's trimmed back to the shared prefix
+
+            var text = ""
+            for await item in try generate(input: LMInput(tokens: MLXArray(input)), cache: cache,
+                                           parameters: parameters, context: context) {
+                if case .chunk(let chunk) = item { text += chunk }
+            }
+
+            // Drop this dictation from the cache, keeping only the shared prefix for the next one
+            if !prefix.isEmpty, full.starts(with: prefix), canTrimPromptCache(cache),
+               let offset = cache.first?.offset, offset >= prefix.count {
+                for layer in cache { layer.trim(offset - prefix.count) }
+                reuse.cache = cache
+            }
+            return text
+        }
         return stripDelimiters(response)
+    }
+
+    /// Framed as data: a bare question like "Are you working or not?" otherwise gets answered or rewritten.
+    private static func frame(_ transcript: String) -> String {
+        "Transcript to clean:\n\"\"\"\n\(transcript)\n\"\"\""
+    }
+
+    /// Cleanup only deletes words, so output needs about as many tokens as the input; the cap stops a
+    /// model that starts rambling. Roughly three characters per token for English.
+    static func outputTokenLimit(for rawText: String) -> Int {
+        min(512, 2 * (rawText.count / 3 + 1) + 32)
     }
 
     /// Loads the selected model ahead of the first dictation (launch warm-up).
@@ -80,14 +148,15 @@ actor CleanupService: CleanupServiceProtocol {
         _ = try await loadModel()
     }
 
-    private func loadModel() async throws -> ModelContainer {
-        let modelID = UserDefaults.standard.string(forKey: "selectedCleanupModelID") ?? ModelRegistry.defaultCleanupModelID
-        if let existing = container, loadedModelID == modelID { return existing }
-        if let loading, loading.modelID == modelID { return try await loading.task.value }
-        guard let info = ModelRegistry.model(id: modelID) else { throw CleanupError.modelNotLoaded }
+    private func loadModel() async throws -> (ModelContainer, ModelInfo) {
+        let modelID = fixedModelID
+            ?? UserDefaults.standard.string(forKey: "selectedCleanupModelID") ?? ModelRegistry.defaultCleanupModelID
+        if let existing = container, let loadedInfo, loadedModelID == modelID { return (existing, loadedInfo) }
+        guard let info = ModelRegistry.model(id: modelID), info.engine == .mlx else { throw CleanupError.modelNotLoaded }
+        if let loading, loading.modelID == modelID { return (try await loading.task.value, info) }
 
         let modelDir = ModelStore.shared.modelDirectory(for: info)
-        guard FileManager.default.fileExists(atPath: modelDir.appendingPathComponent("config.json").path) else {
+        guard ModelInstaller.isMLXComplete(at: modelDir) else {
             throw CleanupError.modelNotLoaded
         }
 
@@ -96,8 +165,9 @@ actor CleanupService: CleanupServiceProtocol {
         defer { if loading?.task == task { loading = nil } }  // only clear our own load
         let loaded = try await task.value
         container = loaded
+        loadedInfo = info
         loadedModelID = modelID
-        return loaded
+        return (loaded, info)
     }
 
     // MARK: - Output checks
@@ -157,6 +227,8 @@ actor CleanupService: CleanupServiceProtocol {
     /// Removes the triple-quote framing and a `Cleaned:` label if the model echoes them back.
     static func stripDelimiters(_ text: String) -> String {
         var result = text.replacingOccurrences(of: "\"\"\"", with: "")
+            // A thinking model that ignored enable_thinking: false must never have its reasoning pasted
+            .replacingOccurrences(of: #"(?s)<think>.*?</think>"#, with: "", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
         for label in ["Transcript to clean:", "Cleaned:"] where result.lowercased().hasPrefix(label.lowercased()) {
             result = String(result.dropFirst(label.count)).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -175,4 +247,12 @@ actor CleanupService: CleanupServiceProtocol {
             .split { !($0.isLetter || $0.isNumber || $0 == "'") }
             .map(String.init)
     }
+}
+
+/// The key/value cache for the system prompt, reused across dictations for the same model and prompt.
+/// Only touched inside `ModelContainer.perform`, which `CleanupService` runs one dictation at a time.
+final class PromptPrefixCache: @unchecked Sendable {
+    var key: String?
+    var prefix: [Int] = []
+    var cache: [KVCache]?
 }

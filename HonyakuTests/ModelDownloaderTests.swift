@@ -10,6 +10,7 @@ final class ModelDownloaderTests: XCTestCase {
         let noChecksumModel = ModelInfo(
             id: model.id + "_test_\(UUID())",
             type: model.type,
+            engine: model.engine,
             displayName: model.displayName,
             hfRepoPath: model.hfRepoPath,
             fileNames: ["test.bin"],
@@ -27,6 +28,7 @@ final class ModelDownloaderTests: XCTestCase {
         let model = ModelInfo(
             id: "checksum_test_\(UUID())",
             type: .cleanup,
+            engine: .mlx,
             displayName: "Test",
             hfRepoPath: "test/repo",
             fileNames: ["test.bin"],
@@ -48,6 +50,7 @@ final class ModelDownloaderTests: XCTestCase {
         let model = ModelInfo(
             id: "network_test_\(UUID())",
             type: .cleanup,
+            engine: .mlx,
             displayName: "Test",
             hfRepoPath: "test/repo",
             fileNames: ["test.bin"],

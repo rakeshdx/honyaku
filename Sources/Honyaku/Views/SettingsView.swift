@@ -332,9 +332,8 @@ struct ModelSettingsRow: View {
     private func downloadModel() {
         isDownloading = true
         Task {
-            let downloader = ModelDownloader()
             do {
-                try await downloader.download(model: model) { p in
+                try await ModelInstaller.shared.install(model) { p in
                     Task { @MainActor in progress = p }
                 }
                 await MainActor.run {

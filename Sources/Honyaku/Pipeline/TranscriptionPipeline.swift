@@ -91,9 +91,9 @@ final class TranscriptionPipeline {
     private let pasteboardClearDelay: Double = 5.0
 
     private func run(audioURL: URL, floatArray: [Float]) async throws {
-        // Step 1: ASR (WhisperKit consumes audioURL and deletes it on return)
+        // Step 1: ASR (the service deletes audioURL on return; Parakeet reads the float samples directly)
         let modelID = appState.selectedSpeechModelID
-        let result = try await transcription.transcribe(audioURL: audioURL, modelID: modelID)
+        let result = try await transcription.transcribe(audioURL: audioURL, samples16k: floatArray, modelID: modelID)
 
         // Empty / silence → discard
         guard !result.rawText.trimmingCharacters(in: .whitespaces).isEmpty else {

@@ -1,4 +1,3 @@
-import AVFoundation
 import Foundation
 import os
 import WhisperKit
@@ -11,66 +10,48 @@ enum TranscriptionError: Error {
 
 actor TranscriptionService: ASRService {
     private var loadedModelID: String?
-    private var whisperKit: WhisperKit?
+    private var engine: (any SpeechEngine)?
     // In-flight load, so a launch warm-up and a dictation never load the model twice
-    private var loading: (modelID: String, allowsFetch: Bool, task: Task<WhisperKit, Error>)?
-    private let store = ModelStore.shared
+    private var loading: (modelID: String, allowsFetch: Bool, task: Task<any SpeechEngine, Error>)?
     private let timeoutSeconds: Double = 15
     private static let log = Logger(subsystem: "com.honyaku.app", category: "transcription")
 
     func transcribe(audioURL: URL, modelID: String) async throws -> TranscriptionResult {
+        try await transcribe(audioURL: audioURL, samples16k: nil, modelID: modelID)
+    }
+
+    /// `samples16k` is the same audio as 16 kHz mono floats, which Parakeet uses directly.
+    func transcribe(audioURL: URL, samples16k: [Float]?, modelID: String) async throws -> TranscriptionResult {
         defer { deleteTempFile(audioURL) }
 
-        let kit = try await loadWhisperKit(modelID: modelID)
-        let options = TranscriptionService.decodeOptions(forDurationSeconds: Self.duration(of: audioURL))
+        let engine = try await loadEngine(modelID: modelID)
 
-        let result = try await withThrowingTaskGroup(of: [TranscriptionResult].self) { group in
+        return try await withThrowingTaskGroup(of: TranscriptionResult.self) { group in
             group.addTask {
-                let segments = try await kit.transcribe(audioPath: audioURL.path, decodeOptions: options)
-                guard !segments.isEmpty, let first = segments.first else {
-                    throw TranscriptionError.emptyResult
-                }
-                let whisperSegments = segments.flatMap { $0.segments }
-                let duration = whisperSegments.last.map { Double($0.end) } ?? 0
-                let timed = whisperSegments.map {
-                    TimedSegment(startSeconds: Double($0.start), endSeconds: Double($0.end),
-                                 text: TranscriptionService.stripNonSpeech(TranscriptionService.stripTokens($0.text)))
-                }
-                let fullText = TranscriptionService.assembleText(
-                    windowTexts: segments.map(\.text), segmentTexts: whisperSegments.map(\.text)
-                )
-                return [TranscriptionResult(
-                    rawText: fullText,
-                    language: first.language,
-                    durationSeconds: duration,
-                    timedSegments: timed
-                )]
+                try await engine.transcribe(audioURL: audioURL, samples16k: samples16k)
             }
             group.addTask {
                 try await Task.sleep(for: .seconds(self.timeoutSeconds))
                 throw TranscriptionError.timedOut
             }
-            let results = try await group.next()!
+            let result = try await group.next()!
             group.cancelAll()
-            return results
+            return result
         }
-        return result[0]
     }
 
     // MARK: - Private
 
     /// Loads the speech model ahead of the first dictation (launch warm-up). Local only: skipped unless the
-    /// model and its tokenizer are on disk, and never falls back to a fetch, so launch makes no network call.
+    /// model (and, for Whisper, its tokenizer) is on disk, and never falls back to a fetch, so launch makes
+    /// no network call.
     func prepareIfDownloaded(modelID: String) async throws {
-        guard let info = ModelRegistry.model(id: modelID), let variant = info.whisperVariant,
-              TranscriptionService.isModelDownloaded(at: TranscriptionService.localModelFolder(repo: info.hfRepoPath, variant: variant)),
-              TranscriptionService.isTokenizerDownloaded(variant: variant)
-        else { return }
-        _ = try await loadWhisperKit(modelID: modelID, allowFetch: false)
+        guard let info = ModelRegistry.model(id: modelID), ModelInstaller.isInstalled(info) else { return }
+        _ = try await loadEngine(modelID: modelID, allowFetch: false)
     }
 
-    private func loadWhisperKit(modelID: String, allowFetch: Bool = true) async throws -> WhisperKit {
-        if let kit = whisperKit, loadedModelID == modelID { return kit }
+    private func loadEngine(modelID: String, allowFetch: Bool = true) async throws -> any SpeechEngine {
+        if let engine, loadedModelID == modelID { return engine }
         if let loading, loading.modelID == modelID {
             do {
                 return try await loading.task.value
@@ -78,18 +59,41 @@ actor TranscriptionService: ASRService {
                 // Warm-up's local-only load failed; a dictation may still fetch the model
             }
         }
-        guard let info = ModelRegistry.model(id: modelID),
-              let variant = info.whisperVariant else { throw TranscriptionError.modelNotLoaded }
-
-        let task = Task {
-            try await TranscriptionService.makeWhisperKit(repo: info.hfRepoPath, variant: variant, allowFetch: allowFetch)
+        guard let info = ModelRegistry.model(id: modelID), info.type == .speech else {
+            throw TranscriptionError.modelNotLoaded
         }
+
+        let task = Task { try await TranscriptionService.makeEngine(for: info, allowFetch: allowFetch) }
         loading = (modelID, allowFetch, task)
         defer { if loading?.task == task { loading = nil } }  // only clear our own load
-        let kit = try await task.value
-        whisperKit = kit
+        let loaded = try await task.value
+        engine = loaded
         loadedModelID = modelID
-        return kit
+        return loaded
+    }
+
+    private static func makeEngine(for info: ModelInfo, allowFetch: Bool) async throws -> any SpeechEngine {
+        switch info.engine {
+        case .parakeet:
+            let folder = ModelInstaller.parakeetFolder()
+            if !ModelInstaller.isParakeetComplete(at: folder) {
+                guard allowFetch else { throw TranscriptionError.modelNotLoaded }
+                // Missing or partial: fetch it (and compile it) first
+                try await ModelInstaller.shared.install(info) { _ in }
+            }
+            do {
+                return try await ParakeetEngine.load(from: folder)
+            } catch {
+                log.error("Local speech model failed to load (\(String(describing: type(of: error)), privacy: .public))")
+                throw error
+            }
+        case .whisperKit:
+            guard let variant = info.whisperVariant else { throw TranscriptionError.modelNotLoaded }
+            return WhisperKitEngine(kit: try await makeWhisperKit(repo: info.hfRepoPath, variant: variant,
+                                                                 allowFetch: allowFetch))
+        case .mlx, .speakerKit:
+            throw TranscriptionError.modelNotLoaded
+        }
     }
 
     private static func makeWhisperKit(repo: String, variant: String, allowFetch: Bool) async throws -> WhisperKit {
@@ -155,11 +159,6 @@ actor TranscriptionService: ASRService {
             if let range = text.range(of: segment) { text.removeSubrange(range) }
         }
         return stripNonSpeech(text)
-    }
-
-    private static func duration(of url: URL) -> Double? {
-        guard let file = try? AVAudioFile(forReading: url), file.fileFormat.sampleRate > 0 else { return nil }
-        return Double(file.length) / file.fileFormat.sampleRate
     }
 
     /// Remove WhisperKit special tokens like <|startoftranscript|>, <|0.00|>, <|en|>, etc.

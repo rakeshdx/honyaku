@@ -10,15 +10,15 @@ struct DiarizedSegment: Equatable {
 }
 
 /// A single timed chunk of transcribed text from WhisperKit.
-struct TimedSegment {
+struct TimedSegment: Sendable {
     let startSeconds: Double
     let endSeconds: Double
     let text: String
 }
 
-struct TranscriptionResult {
+struct TranscriptionResult: Sendable {
     let rawText: String
     let language: String
     let durationSeconds: Double
-    let timedSegments: [TimedSegment]  // WhisperKit word/segment timing — used for speaker assignment
+    let timedSegments: [TimedSegment]  // per-segment timing from the speech engine — used for speaker assignment
 }

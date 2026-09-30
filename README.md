@@ -7,7 +7,7 @@ Honyaku is a native macOS menu bar app that converts speech to clean, intelligen
 ## Features
 
 - **Hold ⌃ Control** to record; release to transcribe and paste
-- **Local Whisper models** — tiny, small, multilingual
+- **Local speech models** — NVIDIA Parakeet for English, Whisper large-v3-turbo for 99 languages
 - **Local LLM cleanup** — removes filler words (um, uh, like), false starts, self-corrections
 - **Speaker diarization** — identify multiple speakers with `[Speaker 1]`, `[Speaker 2]` labels
 - **Menu bar only** — no Dock icon; lives quietly in your status bar
@@ -32,7 +32,7 @@ Honyaku is a native macOS menu bar app that converts speech to clean, intelligen
 | Intel Mac | ❌ Not supported |
 
 Apple Silicon is required for:
-- **WhisperKit** — CoreML models that run on the Apple Neural Engine (ANE)
+- **FluidAudio** (Parakeet) and **WhisperKit** (Whisper) — Core ML models that run on the Apple Neural Engine (ANE)
 - **MLXLLM** — MLX framework requires Apple Silicon Metal/ANE for inference
 - **SpeakerKit** — CoreML diarization models optimised for ANE
 
@@ -44,7 +44,7 @@ Apple Silicon is required for:
 2. Open the DMG and drag Honyaku to Applications
 3. Launch Honyaku — it appears in your menu bar
 4. Grant **Microphone** and **Accessibility** permissions when prompted
-5. Choose your speech and cleanup models in the setup wizard and download them (~500 MB default)
+5. Choose your speech and cleanup models in the setup wizard and download them (about 1.4 GB on 8 GB Macs, 2.7 GB on 16 GB and up)
 
 > **Gatekeeper warning?** Go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to Honyaku. You only need to do this once.
 
@@ -57,17 +57,17 @@ Apple Silicon is required for:
 
 ## Model selection
 
-| Speech Model | Size | Notes |
+| Speech model | Size | Notes |
 |---|---|---|
-| Whisper tiny.en | 75 MB | Fastest, English only |
-| **Whisper small.en** (default) | 466 MB | Best speed/accuracy balance |
-| Whisper small (multilingual) | 466 MB | 99 languages |
+| **Parakeet TDT 0.6B v2** (default) | 464 MB | English; most accurate and fastest; adds punctuation |
+| Whisper large-v3-turbo | 627 MB | 99 languages |
 
-| Cleanup Model | Size | Speed |
+| Cleanup model | Size | Default for |
 |---|---|---|
-| **Qwen 2.5 1.5B 4-bit MLX** (default) | ~950 MB | ~2–3s on M1 |
-| Qwen 2.5 3B 4-bit MLX | ~1.9 GB | ~5–6s on M1 |
-| Qwen 2.5 7B 4-bit MLX | ~4.3 GB | ~10–15s on M1 |
+| **Qwen3 1.7B 4-bit MLX** | ~970 MB | Macs with less than 16 GB of memory |
+| **Qwen3 4B Instruct 2507 4-bit MLX** | ~2.3 GB | Macs with 16 GB or more |
+
+Selections of older models (Whisper tiny/small, Qwen 2.5) move to the nearest new model automatically; the old files stay on disk until you delete them in Settings.
 
 Cleanup runs with **temperature 0.0** (greedy decoding) for deterministic, faithful output — the model removes fillers without paraphrasing or inventing content.
 
@@ -110,8 +110,12 @@ Debug builds don't register themselves as a login item. Launching a new copy of 
 # Unit tests (fast, no models required)
 xcodebuild test -scheme HonyakuTests -destination 'platform=macOS'
 
-# Integration tests (requires downloaded models)
-INTEGRATION_TESTS=1 xcodebuild test -scheme HonyakuIntegrationTests -destination 'platform=macOS'
+# Integration tests (requires downloaded models). The TEST_RUNNER_ prefix passes the variable to the test process.
+TEST_RUNNER_INTEGRATION_TESTS=1 xcodebuild test -scheme HonyakuIntegrationTests -destination 'platform=macOS'
+
+# Model benchmark: accuracy and latency of every installed model on this Mac
+TEST_RUNNER_INTEGRATION_TESTS=1 xcodebuild test -scheme HonyakuIntegrationTests -destination 'platform=macOS' \
+  -only-testing:HonyakuIntegrationTests/ModelBenchmarkTests
 ```
 
 **Before running hotkey tests**: grant Accessibility permission to `xctest` in System Settings → Privacy & Security → Accessibility.
@@ -127,3 +131,7 @@ mitmproxy --mode transparent
 ## License
 
 MIT
+
+## Credits
+
+Parakeet TDT 0.6B v2 by NVIDIA, licensed under CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/), with Core ML conversion by FluidInference, used unmodified. The full list of models and libraries is in [`Sources/Resources/ThirdPartyNotices.md`](Sources/Resources/ThirdPartyNotices.md), which ships inside the app.
