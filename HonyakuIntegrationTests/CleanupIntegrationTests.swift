@@ -17,7 +17,8 @@ final class CleanupIntegrationTests: IntegrationTestBase {
         XCTAssertFalse(words.contains("um") || words.contains("uh"), "Got: \(output)")
     }
 
-    /// Share no words with the prompt's examples, so a pass isn't the model copying them
+    /// Share no content words with the prompt's examples (only function words like "I", "we", "it"),
+    /// so a pass isn't the model copying them
     func testHeldOutSentencesStayFaithful() async throws {
         for raw in [
             "I guess we could um probably try it again",
@@ -25,8 +26,24 @@ final class CleanupIntegrationTests: IntegrationTestBase {
             "please uh call the dentist and book an appointment",
             "the invoice goes out on Friday",
         ] {
-            try await assertFaithful(raw)
+            let output = try await assertFaithful(raw)
+            assertNoUnambiguousFillers(output)
         }
+    }
+
+    /// A bare "so" / "like" is content to the check, so the model must keep it rather than trigger the fallback
+    func testBareSoAndLikeAreKept() async throws {
+        try await assertFaithful("so the printer on floor two is broken again")
+        try await assertFaithful("I like the new layout for the dashboard")
+    }
+
+    func testSetOffLikeMayBeRemoved() async throws {
+        try await assertFaithful("the parking garage was, like, completely full today")
+    }
+
+    private func assertNoUnambiguousFillers(_ output: String, file: StaticString = #filePath, line: UInt = #line) {
+        let words = output.lowercased().split { !$0.isLetter }
+        XCTAssertTrue(Set(words).isDisjoint(with: ["um", "umm", "uh", "hmm"]), "Fillers left in: \(output)", file: file, line: line)
     }
 
     @discardableResult

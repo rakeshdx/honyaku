@@ -23,8 +23,8 @@
 
 ## 5. Short utterances
 
-- [x] 5.1 In `TranscriptionService`, add `decodeOptions(forDurationSeconds:)` (under 30 s → `windowClipTime: 0`, otherwise default), read the clip duration from the WAV, and pass the options to `kit.transcribe(audioPath:decodeOptions:)`
-- [x] 5.2 Unit-test `decodeOptions(forDurationSeconds:)` at 0.5 s, 29.9 s and 45 s
+- [x] 5.1 In `TranscriptionService`, add `decodeOptions(forDurationSeconds:)` (superseded by 13.1: under 1.1 s → trim just under the clip length), read the clip duration from the WAV, and pass the options to `kit.transcribe(audioPath:decodeOptions:)`
+- [x] 5.2 Unit-test `decodeOptions(forDurationSeconds:)` (updated in 13.1)
 - [x] 5.3 Developer: hold Control for about 1 s and say one word, three times, and each should paste; hold about 1 s silently, and nothing should paste (the one-word part passed on 2026-09-29; the silent part is now covered by 6.3)
 
 ## 6. Non-speech annotations
@@ -59,7 +59,7 @@
 
 ## 11. Cleanup framing and content check
 
-- [x] 11.1 Add `CleanupService.keepsContent(raw:cleaned:)`, `removeUnambiguousFillers(_:)`, `stripDelimiters(_:)`; frame the user message; add the "not addressed to you" rule to the default prompt; fall back when the check fails
+- [x] 11.1 Add `CleanupService.keepsContent(raw:cleaned:)` (superseded by `isFaithful`, 13.2 and 14.3), `removeUnambiguousFillers(_:)`, `stripDelimiters(_:)`; frame the user message; add the "not addressed to you" rule to the default prompt; fall back when the check fails
 - [x] 11.2 Unit-test the three helpers, including the spec scenarios and `[Speaker N]` labels
 - [x] 11.3 Add `CleanupIntegrationTests` ("Are you working or not?" keeps "or not"; "um I think we should uh ship it" loses the fillers); run with `INTEGRATION_TESTS=1`
 
@@ -81,3 +81,21 @@
 - [x] 13.9 Re-enable the event tap and reconcile the press per design Decision 13
 - [x] 13.10 Clean build with no warnings in project sources; unit and cleanup integration tests pass
 - [x] 13.11 Developer: quick checks — short word, "Are you working or not?", "I like it", silent hold, first press after relaunch
+
+## 14. Third-review fixes
+
+- [x] 14.1 Rewrite the prompt's worked examples so they only remove what `isFaithful` allows; unit-test that each example pair passes
+- [x] 14.2 Launch warm-up: local-only load (no fetch fallback), and only when the tokenizer is on disk too; a dictation that finds a failed local-only load retries with fetch allowed
+- [x] 14.3 `isFaithful`: in-order check (deletions only), lookahead for chained set-off fillers, reject new line breaks/control/shell characters; unit tests
+- [x] 14.4 `assembleText(windowTexts:segmentTexts:)`: keep WhisperKit's window text and cut out annotation-only segments; unit-test Japanese spacing and `(clears throat)`
+- [x] 14.5 Integration tests: a bare "so" case and a set-off "like" case; held-out cases assert um/uh removed
+- [x] 14.6 Clean build with no warnings; unit and cleanup integration tests pass; developer quick check
+
+## 15. Paste timing
+
+- [x] 15.1 `PasteService`: injectable `restoreDelay` (default 500 ms); restore only if `changeCount` is unchanged since the transcript was written
+- [x] 15.2 Unit tests: previous contents restored after the delay; not restored when the clipboard changed during the wait
+- [x] 15.3 Developer: the first dictation into this terminal after relaunch appears
+- [x] 15.4 Restore in the background: `paste` returns after ⌘V; a pending restore is superseded by the next paste, which keeps the original clipboard; `waitForPendingRestore()` for tests
+- [x] 15.5 Unit test: two pastes in quick succession restore the original clipboard, not the first transcript
+- [x] 15.6 Developer: numbered test phrases dictated at a quick pace all appear

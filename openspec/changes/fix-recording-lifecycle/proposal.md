@@ -19,6 +19,8 @@ The pre-push `/review` of `fix/single-instance-accessibility` found three bugs i
 10. **The prompt alone didn't stop word loss.** With the new default prompt in use, qwen-3b still returned "Are you working?" for "Are you working or not?", the same way all three times. The transcript is sent as a bare chat message, which reads as something to reply to, and a 3B model follows "keep every word" loosely.
 11. **The first dictation after launch is slow.** Release to paste took 2.0 s on the first press, against 0.8 s later, because the Whisper and cleanup models are loaded on first use.
 
+12. **Pastes into slow readers are lost.** `PasteService` restored the previous clipboard 150 ms after posting ⌘V. A terminal that read the clipboard later received the restored (empty) clipboard, so the first dictation into a terminal after launch pasted nothing. This was already on `main`.
+
 ## What Changes
 
 - A Control press that ends without a transcription (too short, or cut short) always stops capture, releases the mic and returns to idle.
@@ -32,7 +34,8 @@ The pre-push `/review` of `fix/single-instance-accessibility` found three bugs i
 - The default cleanup prompt keeps every word apart from fillers and false starts, and forbids rephrasing. A user-customised prompt is not changed.
 - The transcript is sent to the cleanup model inside delimiters. A code check rejects cleanup output that loses a content word or adds any word, and falls back to the raw text with only um/umm/uh/hmm removed.
 - The speech model, and the cleanup model if enabled, are loaded in the background at launch, but only if already on disk. A dictation during warm-up waits for that load.
-- A disconnect while a dictation is being transcribed no longer changes the status, and the event tap is re-enabled if macOS disables it. Both previously could leave the mic on (found in the re-review; already on `main`).
+- A disconnect while a dictation is being transcribed no longer changes the status, and the event tap is re-enabled if macOS disables it. Both could previously leave the mic on. They were found in the re-review, and the underlying code predates this branch.
+- The clipboard is restored 500 ms after the paste instead of 150 ms, and not at all if the user changed the clipboard in the meantime.
 - Disconnects of non-audio devices are ignored. If an audio input disconnects while a recording is running, that recording is cancelled (mic released, audio discarded) before the error is shown.
 
 ## Capabilities
@@ -55,7 +58,7 @@ The pre-push `/review` of `fix/single-instance-accessibility` found three bugs i
   - `Sources/Honyaku/Services/AudioCaptureService.swift` (tap symmetry, audio-only disconnects)
   - `Sources/Honyaku/Pipeline/TranscriptionPipeline.swift` (cancel on disconnect)
   - `Sources/Honyaku/Services/TranscriptionService.swift` (per-clip decoding options, annotation removal, local-first model loading)
-  - `Sources/Honyaku/Services/PasteService.swift` (the ⌘V sender can be injected, so tests don't type into other apps)
+  - `Sources/Honyaku/Services/PasteService.swift` (the ⌘V sender can be injected, so tests don't type into other apps; the restore delay is longer, and the restore is skipped if the clipboard changed)
   - `Sources/Honyaku/App/HonyakuApp.swift` (wires the cancel callback; starts the pipeline at launch)
   - `Sources/Honyaku/Services/CleanupService.swift` (default prompt, framing, faithfulness check and fallback, launch warm-up)
 - **Tests:** new `HonyakuTests/PushToTalkGestureTests.swift`, unit tests for the cleanup content check, a cleanup integration test using the downloaded model, plus unit tests for the decoding-option choice and for removing annotations. The AVAudioEngine paths are verified by hand.

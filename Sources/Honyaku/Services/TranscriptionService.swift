@@ -13,7 +13,7 @@ actor TranscriptionService: ASRService {
     private var loadedModelID: String?
     private var whisperKit: WhisperKit?
     // In-flight load, so a launch warm-up and a dictation never load the model twice
-    private var loading: (modelID: String, task: Task<WhisperKit, Error>)?
+    private var loading: (modelID: String, allowsFetch: Bool, task: Task<WhisperKit, Error>)?
     private let store = ModelStore.shared
     private let timeoutSeconds: Double = 15
     private static let log = Logger(subsystem: "com.honyaku.app", category: "transcription")
@@ -36,10 +36,9 @@ actor TranscriptionService: ASRService {
                     TimedSegment(startSeconds: Double($0.start), endSeconds: Double($0.end),
                                  text: TranscriptionService.stripNonSpeech(TranscriptionService.stripTokens($0.text)))
                 }
-                // Built from cleaned segments so a segment that is only "(clears throat)" drops out mid-transcript
-                let fullText = whisperSegments.isEmpty
-                    ? TranscriptionService.assembleText(segments.map(\.text))
-                    : TranscriptionService.assembleText(whisperSegments.map(\.text))
+                let fullText = TranscriptionService.assembleText(
+                    windowTexts: segments.map(\.text), segmentTexts: whisperSegments.map(\.text)
+                )
                 return [TranscriptionResult(
                     rawText: fullText,
                     language: first.language,
@@ -60,31 +59,40 @@ actor TranscriptionService: ASRService {
 
     // MARK: - Private
 
-    /// Loads the speech model ahead of the first dictation (launch warm-up) — only if it is already on
-    /// disk, so warm-up never starts a download. A missing model is fetched by the first dictation.
+    /// Loads the speech model ahead of the first dictation (launch warm-up). Local only: skipped unless the
+    /// model and its tokenizer are on disk, and never falls back to a fetch, so launch makes no network call.
     func prepareIfDownloaded(modelID: String) async throws {
         guard let info = ModelRegistry.model(id: modelID), let variant = info.whisperVariant,
-              TranscriptionService.isModelDownloaded(at: TranscriptionService.localModelFolder(repo: info.hfRepoPath, variant: variant))
+              TranscriptionService.isModelDownloaded(at: TranscriptionService.localModelFolder(repo: info.hfRepoPath, variant: variant)),
+              TranscriptionService.isTokenizerDownloaded(variant: variant)
         else { return }
-        _ = try await loadWhisperKit(modelID: modelID)
+        _ = try await loadWhisperKit(modelID: modelID, allowFetch: false)
     }
 
-    private func loadWhisperKit(modelID: String) async throws -> WhisperKit {
+    private func loadWhisperKit(modelID: String, allowFetch: Bool = true) async throws -> WhisperKit {
         if let kit = whisperKit, loadedModelID == modelID { return kit }
-        if let loading, loading.modelID == modelID { return try await loading.task.value }
+        if let loading, loading.modelID == modelID {
+            do {
+                return try await loading.task.value
+            } catch where allowFetch && !loading.allowsFetch {
+                // Warm-up's local-only load failed; a dictation may still fetch the model
+            }
+        }
         guard let info = ModelRegistry.model(id: modelID),
               let variant = info.whisperVariant else { throw TranscriptionError.modelNotLoaded }
 
-        let task = Task { try await TranscriptionService.makeWhisperKit(repo: info.hfRepoPath, variant: variant) }
-        loading = (modelID, task)
-        defer { if loading?.modelID == modelID { loading = nil } }
+        let task = Task {
+            try await TranscriptionService.makeWhisperKit(repo: info.hfRepoPath, variant: variant, allowFetch: allowFetch)
+        }
+        loading = (modelID, allowFetch, task)
+        defer { if loading?.task == task { loading = nil } }  // only clear our own load
         let kit = try await task.value
         whisperKit = kit
         loadedModelID = modelID
         return kit
     }
 
-    private static func makeWhisperKit(repo: String, variant: String) async throws -> WhisperKit {
+    private static func makeWhisperKit(repo: String, variant: String, allowFetch: Bool) async throws -> WhisperKit {
         let folder = localModelFolder(repo: repo, variant: variant)
         if isModelDownloaded(at: folder) {
             do {
@@ -94,9 +102,11 @@ actor TranscriptionService: ASRService {
                 ))
             } catch {
                 // An unloadable local copy counts as missing; the error type is logged, never transcript data
-                log.error("Local speech model failed to load (\(String(describing: type(of: error)), privacy: .public)); fetching it")
+                log.error("Local speech model failed to load (\(String(describing: type(of: error)), privacy: .public))")
+                guard allowFetch else { throw error }
             }
         }
+        guard allowFetch else { throw TranscriptionError.modelNotLoaded }
         // Missing or unreadable: let WhisperKit fetch it from Hugging Face.
         return try await WhisperKit(model: variant, modelRepo: repo)
     }
@@ -106,6 +116,16 @@ actor TranscriptionService: ASRService {
     static func localModelFolder(repo: String, variant: String,
                                  documents: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) -> URL {
         documents.appending(path: "huggingface/models").appending(path: repo).appending(path: variant)
+    }
+
+    /// WhisperKit loads the tokenizer from `<documents>/huggingface/models/openai/whisper-<size>/tokenizer.json`
+    /// ("openai_whisper-tiny.en" → "openai/whisper-tiny.en"), fetching it on first load if missing.
+    static func isTokenizerDownloaded(variant: String,
+                                      documents: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) -> Bool {
+        guard variant.hasPrefix("openai_") else { return false }
+        let name = "openai/" + variant.dropFirst("openai_".count)
+        let file = documents.appending(path: "huggingface/models").appending(path: name).appending(path: "tokenizer.json")
+        return FileManager.default.fileExists(atPath: file.path)
     }
 
     /// True when every compiled model WhisperKit needs is complete; an interrupted download fails this.
@@ -125,12 +145,16 @@ actor TranscriptionService: ASRService {
         return DecodingOptions(windowClipTime: Float(max(0, duration - 0.1)))
     }
 
-    /// Joins segment texts after removing special tokens and non-speech annotations from each.
-    static func assembleText(_ segmentTexts: [String]) -> String {
-        segmentTexts
-            .map { stripNonSpeech(stripTokens($0)) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
+    /// Transcript text from WhisperKit's window text — which keeps the original spacing, so scripts without
+    /// spaces aren't split — with non-speech annotations removed, including segments that are only a
+    /// parenthesised annotation such as "(clears throat)".
+    static func assembleText(windowTexts: [String], segmentTexts: [String]) -> String {
+        var text = windowTexts.map(stripTokens).joined(separator: " ")
+        for segment in segmentTexts.map(stripTokens)
+        where segment.range(of: #"^\([^)]*\)$"#, options: .regularExpression) != nil {
+            if let range = text.range(of: segment) { text.removeSubrange(range) }
+        }
+        return stripNonSpeech(text)
     }
 
     private static func duration(of url: URL) -> Double? {

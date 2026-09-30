@@ -9,36 +9,77 @@ enum PasteError: Error {
 actor PasteService: PasteServiceProtocol {
     private let pasteboardClearDelaySeconds: Double = 5.0
     private let sendPasteKeystroke: @Sendable () throws -> Void
+    private let restoreDelay: Duration
 
     /// `sendPasteKeystroke` defaults to a real ⌘V; tests inject a recorder so they never type into other apps.
-    init(sendPasteKeystroke: @escaping @Sendable () throws -> Void = { try PasteService.postCommandV() }) {
+    /// `restoreDelay` must outlast slow clipboard readers — terminals missed the paste at 150 ms.
+    init(restoreDelay: Duration = .milliseconds(500),
+         sendPasteKeystroke: @escaping @Sendable () throws -> Void = { try PasteService.postCommandV() }) {
+        self.restoreDelay = restoreDelay
         self.sendPasteKeystroke = sendPasteKeystroke
     }
 
+    private typealias ClipboardItems = [(NSPasteboard.PasteboardType, Data)]
+    /// The user's clipboard waiting to be put back, and the background task that will do it
+    private var pendingRestore: (items: ClipboardItems, task: Task<Void, Never>)?
+
+    /// Pastes `text` and returns as soon as ⌘V is posted, so the next dictation isn't blocked;
+    /// the previous clipboard is restored in the background after `restoreDelay`.
     func paste(_ text: String) async throws {
         let pasteboard = NSPasteboard.general
-        // Save prior contents
-        let priorItems = (pasteboard.pasteboardItems ?? []).flatMap { item in
-            item.types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
-                guard let data = item.data(forType: type) else { return nil }
-                return (type, data)
-            }
+        // A pending restore holds the user's real clipboard — the pasteboard now holds our last transcript
+        let priorItems: ClipboardItems
+        if let pending = pendingRestore {
+            pending.task.cancel()
+            pendingRestore = nil
+            priorItems = pending.items
+        } else {
+            priorItems = Self.items(on: pasteboard)
         }
 
         // Write transcript
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+        let transcriptChangeCount = pasteboard.changeCount
 
         do {
             try sendPasteKeystroke()
         } catch {
-            await restorePasteboard(priorItems: priorItems)
+            Self.restore(priorItems, to: pasteboard)
             throw error
         }
 
-        // Give the target app ~150ms to receive the paste before restoring clipboard
-        try await Task.sleep(for: .milliseconds(150))
-        await restorePasteboard(priorItems: priorItems)
+        // Give the target app time to read the transcript, without holding up the pipeline
+        let delay = restoreDelay
+        let task = Task {
+            try? await Task.sleep(for: delay)
+            finishRestore(expectedChangeCount: transcriptChangeCount)
+        }
+        pendingRestore = (priorItems, task)
+    }
+
+    /// Waits for a background clipboard restore to finish (tests).
+    func waitForPendingRestore() async {
+        await pendingRestore?.task.value
+    }
+
+    /// Synchronous on purpose: no suspension point, so a new paste can't read the clipboard mid-restore.
+    private func finishRestore(expectedChangeCount: Int) {
+        guard !Task.isCancelled, let pending = pendingRestore else { return }  // superseded by a newer paste
+        pendingRestore = nil
+        let pasteboard = NSPasteboard.general
+        // If anything was copied meanwhile, it's newer than what we'd restore — leave it
+        guard pasteboard.changeCount == expectedChangeCount else { return }
+        Self.restore(pending.items, to: pasteboard)
+    }
+
+    private static func items(on pasteboard: NSPasteboard) -> ClipboardItems {
+        (pasteboard.pasteboardItems ?? []).flatMap { item in
+            item.types.compactMap { type -> (NSPasteboard.PasteboardType, Data)? in
+                guard let data = item.data(forType: type) else { return nil }
+                return (type, data)
+            }
+        }
     }
 
     /// Call this on pipeline abort or error — clears transcript from pasteboard within 5s.
@@ -67,9 +108,7 @@ actor PasteService: PasteServiceProtocol {
 
     // MARK: - Private
 
-    @MainActor
-    private func restorePasteboard(priorItems: [(NSPasteboard.PasteboardType, Data)]) {
-        let pasteboard = NSPasteboard.general
+    private static func restore(_ priorItems: ClipboardItems, to pasteboard: NSPasteboard) {
         pasteboard.clearContents()
         if priorItems.isEmpty { return }
         let item = NSPasteboardItem()

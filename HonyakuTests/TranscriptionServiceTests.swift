@@ -40,8 +40,18 @@ final class NonSpeechAnnotationTests: XCTestCase {
     }
 
     func testAnnotationOnlySegmentDropsOutOfAssembledText() {
-        XCTAssertEqual(TranscriptionService.assembleText(["(clears throat)", " Send the report."]), "Send the report.")
-        XCTAssertEqual(TranscriptionService.assembleText(["<|0.00|> Hello<|1.00|>", "[BLANK_AUDIO]"]), "Hello")
+        XCTAssertEqual(TranscriptionService.assembleText(windowTexts: [" (clears throat) Send the report."],
+                                                         segmentTexts: [" (clears throat)", " Send the report."]),
+                       "Send the report.")
+        XCTAssertEqual(TranscriptionService.assembleText(windowTexts: ["<|0.00|> Hello<|1.00|> [BLANK_AUDIO]"],
+                                                         segmentTexts: ["<|0.00|> Hello<|1.00|>", " [BLANK_AUDIO]"]),
+                       "Hello")
+    }
+
+    func testScriptsWithoutSpacesKeepTheirSpacing() {
+        XCTAssertEqual(TranscriptionService.assembleText(windowTexts: ["昨日は雨でした。今日は晴れです。"],
+                                                         segmentTexts: ["昨日は雨でした。", "今日は晴れです。"]),
+                       "昨日は雨でした。今日は晴れです。")
     }
 
     func testParenthesesInSpeechAreKept() {
@@ -76,6 +86,15 @@ final class LocalSpeechModelTests: XCTestCase {
     func testMissingModelIsNotDownloaded() throws {
         try makeModel(["AudioEncoder", "TextDecoder"])
         XCTAssertFalse(TranscriptionService.isModelDownloaded(at: root))
+    }
+
+    func testTokenizerPathFollowsVariantName() throws {
+        XCTAssertFalse(TranscriptionService.isTokenizerDownloaded(variant: "openai_whisper-tiny.en", documents: root))
+        let dir = root.appending(path: "huggingface/models/openai/whisper-tiny.en")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("{}".utf8).write(to: dir.appending(path: "tokenizer.json"))
+        XCTAssertTrue(TranscriptionService.isTokenizerDownloaded(variant: "openai_whisper-tiny.en", documents: root))
+        XCTAssertFalse(TranscriptionService.isTokenizerDownloaded(variant: "distil-whisper_large", documents: root))
     }
 
     func testInterruptedModelIsNotDownloaded() throws {

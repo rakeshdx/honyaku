@@ -52,6 +52,10 @@ Every recording that passes the 300 ms minimum hold SHALL be sent through speech
 ### Requirement: Non-speech annotations are never pasted
 Before the transcript is used, the system SHALL remove Whisper's non-speech annotations: any text in square brackets (for example `[BLANK_AUDIO]`, `[MUSIC]`), and any segment made up entirely of a parenthesised annotation (for example `(silence)`). If nothing is left, the recording SHALL be treated as silence: no text is pasted, no history entry is added, and no error is shown.
 
+#### Scenario: Text in scripts without spaces keeps its spacing
+- **WHEN** a multilingual model transcribes two Japanese sentences as separate segments
+- **THEN** the pasted text has no space inserted between them
+
 #### Scenario: Silent hold
 - **WHEN** the user holds Control for about 2 seconds without speaking and Whisper returns `[BLANK_AUDIO]`
 - **THEN** nothing is pasted and no error is shown
@@ -76,7 +80,7 @@ The system SHALL prepare the audio engine's input ahead of the first press, and 
 ---
 
 ### Requirement: Models are loaded at launch
-Once setup is complete, the system SHALL load the selected speech model and, if cleanup is enabled, the selected cleanup model in the background at launch, so the first dictation is about as fast as later ones. Warm-up SHALL only load models already on disk; it SHALL NOT start a download. A dictation made while the models are still loading SHALL wait for that load rather than start a second one.
+Once setup is complete, the system SHALL load the selected speech model and, if cleanup is enabled, the selected cleanup model in the background at launch, so the first dictation is about as fast as later ones. Warm-up SHALL only load models already on disk, including the speech model's tokenizer. It SHALL NOT contact the network: if the local copy fails to load, warm-up gives up, and the next dictation may fetch the model. A dictation made while the models are still loading SHALL wait for that load rather than start a second one.
 
 #### Scenario: First dictation after launch
 - **GIVEN** Honyaku launched a few seconds ago with setup complete

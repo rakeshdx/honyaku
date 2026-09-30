@@ -19,7 +19,6 @@ A push-to-talk press flows like this:
 - Every recording that passes the 300 ms hold reaches the speech decoder.
 
 **Non-Goals:**
-- Re-enabling the event tap after macOS disables it.
 - The `pcmBuffers` cross-thread race.
 - Following a specific selected mic across device changes.
 
@@ -90,7 +89,13 @@ After each pass, `SegmentSeeker` advances `seek` only to the last complete times
 
 ### 5. Remove non-speech annotations in `TranscriptionService`
 
-A new `static func stripNonSpeech(_:)` removes every `\[[^\]]*\]` span, then clears the text if what's left is only a parenthesised span such as `(silence)`, then collapses whitespace. It is applied after `stripTokens` to each timed segment. `rawText` is then assembled from the cleaned segments (`assembleText(_:)`), so a segment that is only `(clears throat)` disappears even in the middle of a longer transcript. When WhisperKit returns no timed segments, the window text is cleaned the same way instead. An empty result already follows the pipeline's existing silent-discard path (`TranscriptionPipeline.run`).
+A new `static func stripNonSpeech(_:)` removes every `\[[^\]]*\]` span, then clears the text if what's left is only a parenthesised span such as `(silence)`, then collapses whitespace. It is applied after `stripTokens` to each timed segment, so diarisation merging never sees the labels.
+
+`rawText` is built by `assembleText(windowTexts:segmentTexts:)`:
+- It starts from WhisperKit's own window text, cleaned the same way, so the original spacing is kept. That matters for scripts without spaces, like Japanese.
+- It then cuts out any segment whose whole text is a parenthesised annotation, so `(clears throat)` disappears even mid-transcript.
+
+An earlier version joined segment texts with spaces. That inserted stray spaces into Japanese and Chinese.
 
 Whisper doesn't put dictated words in square brackets, so removing every bracketed span is safe. Parentheses can appear in real speech, so they're only dropped when they make up the whole segment.
 
@@ -103,7 +108,7 @@ Whisper doesn't put dictated words in square brackets, so removing every bracket
 `TranscriptionService.loadWhisperKit`:
 1. Builds that path, using a small static helper that the tests can cover.
 2. Treats the model as downloaded when `AudioEncoder.mlmodelc`, `TextDecoder.mlmodelc` and `MelSpectrogram.mlmodelc` each contain a `coremldata.bin`. An interrupted download fails this check.
-3. If it's downloaded, creates `WhisperKit(WhisperKitConfig(model:, modelRepo:, modelFolder: <path>, download: false))`. With `modelFolder` set, WhisperKit skips `download()` entirely. The tokenizer already loads local-first from `~/Documents/huggingface/models/openai/<name>/tokenizer.json`, which setup downloaded.
+3. If it's downloaded, creates `WhisperKit(WhisperKitConfig(model:, modelRepo:, modelFolder: <path>, download: false))`. With `modelFolder` set, WhisperKit skips `download()` entirely. The tokenizer loads local-first from `~/Documents/huggingface/models/openai/<name>/tokenizer.json`. Setup's `WhisperKit.download` doesn't fetch it, so the first model load does, once.
 4. If it isn't downloaded, or the local load throws (for example a corrupt file), falls back to today's call, `WhisperKit(model:modelRepo:)`, which fetches the missing files. A local load failure is logged with its error type only (`com.honyaku.app` / `transcription`).
 
 *Alternative considered:* recording the download folder when setup finishes. Rejected: models downloaded by earlier builds wouldn't have that record, and the Hub layout already determines the path.
@@ -141,14 +146,19 @@ Saved user prompts in `UserDefaults["cleanupPrompt"]` are not touched. "Reset to
 ### 10. Frame the transcript, then check the result in code
 
 - **Framing:** `CleanupService.clean` sends `Transcript to clean:\n"""\n<raw>\n"""` as the user message. The default prompt gains one rule: the transcript is not addressed to the model, and it must never answer it. `stripDelimiters(_:)` removes any echoed `"""` or wrapping quotes from the reply.
-- **Faithfulness check:** `isFaithful(raw:cleaned:)` checks both directions.
-  - `required` = the words of the raw text after removing always-removable fillers (um/umm/uh/hmm) and set-off ambiguous fillers. An ambiguous filler (like, so, right, basically, literally, you know, sort of, kind of) is set off when followed by a comma and preceded by a comma or a sentence start.
-  - Every required word must appear in the cleaned text, at least as many times.
-  - Every cleaned word must appear in the full raw text, at least as many times, so the model can't add words.
+- **Faithfulness check:** `isFaithful(raw:cleaned:)` allows deletions only.
+  - `required` = the raw words after removing always-removable fillers (um/umm/uh/hmm) and set-off ambiguous fillers. An ambiguous filler (like, so, right, basically, literally, you know, sort of, kind of) is set off when followed by a comma (a regex lookahead, so chained fillers like "Right, so, we…" are all recognised) and preceded by a comma or a sentence start.
+  - The cleaned words must appear in the raw words in the same order, with no additions or reordering.
+  - The required words must appear in the cleaned words in the same order, with no content deleted.
+  - The cleaned text may not introduce a line break, control character or `` ` | & ; $ < > \ { } `` that the raw text lacks. Pasting into a terminal is the reason.
   - Tokens are lowercased runs of letters, digits and apostrophes, with ’ normalised to '. `[Speaker N]` labels are ordinary tokens.
 - **Fallback:** `removeUnambiguousFillers(_:)` strips `um|umm|uh|hmm` as whole words, but not inside hyphenated words like "uh-huh". It then tidies spacing and any leading punctuation left behind.
 - **Delimiters:** `stripDelimiters(_:)` also removes a leading `Cleaned:` label echoed from the examples. Wrapping quotes are removed only when there are no other quotes inside, so a dictated quotation survives.
-- **Worked examples:** the default prompt ends with two before/after examples. With rules alone, qwen-3b still returned "Are you working?" and "We should ship it." (dropping "I think"), so every case fell back to the raw text. With the examples, the fallback stopped firing. The integration tests now check the model's own output (`modelOutput(for:prompt:)`) against `isFaithful` directly, on held-out sentences that share no words with the examples, so a fallback can't mask a failure.
+- **Worked examples:** the default prompt ends with two before/after examples.
+  - With rules alone, qwen-3b still returned "Are you working?" and "We should ship it." (dropping "I think"). Every case fell back to the raw text.
+  - With examples, its own output stayed faithful.
+  - The examples remove only what the check allows: um/uh anywhere, and "like" only when set off with commas. They keep a bare "So". An earlier version dropped a bare "so" and "like", which taught the model to produce output the check then rejected.
+  - The integration tests check the model's own output (`modelOutput(for:prompt:)`) against `isFaithful` directly, so a fallback can't mask a failure. The held-out sentences share no content words with the examples, only function words like "I", "we" and "it". They also check that um/uh were actually removed.
 
 All three are `static` and pure, so they're unit tested. The model itself is exercised by `HonyakuIntegrationTests/CleanupIntegrationTests.swift`, which asserts on the raw model output, which runs only with `INTEGRATION_TESTS=1` and the selected cleanup model on disk.
 
@@ -158,7 +168,9 @@ When the fallback is used it logs `Cleanup output dropped content words; using r
 
 ### 11. Warm models at launch, and load each model once
 
-`TranscriptionPipeline.warmUp()` runs from `startPipelineIfReady()` right after the pipeline is created, which is now at launch (Decision 7). It starts a background Task that awaits `transcription.prepareIfDownloaded(modelID:)`, then `cleanup.prepare()` if cleanup is enabled. The speech model is loaded only if it's already on disk, so warm-up never starts a download. The cleanup loader is local-only already. Errors are ignored, because a real dictation will surface them.
+`TranscriptionPipeline.warmUp()` runs from `startPipelineIfReady()` right after the pipeline is created, which is now at launch (Decision 7). It starts a background Task that awaits `transcription.prepareIfDownloaded(modelID:)`, then `cleanup.prepare()` if cleanup is enabled. The cleanup loader is local-only already.
+
+The speech model is loaded only if its model files and its tokenizer are on disk. It uses a local-only load that never falls back to a fetch, so launch never contacts the network. A dictation that finds a failed local-only load in flight starts its own load, which may fetch. Errors are ignored, because a real dictation will surface them.
 
 Both services are actors whose loaders `await` inside, so a warm-up and a dictation could otherwise both start loading. Each loader therefore keeps the in-flight load as a `Task` keyed by model ID. Concurrent callers await the same task, and a failed task is cleared so the next call retries.
 
@@ -179,6 +191,22 @@ When `HotkeyService.handle` receives `.tapDisabledByTimeout` or `.tapDisabledByU
 3. Feeds that state through `PushToTalkGesture.controlChanged` as if it were a flags event.
 
 If Control was released while the tap was off, the gesture returns `.end` or `.cancel` by hold duration, and the missed release is handled normally. If Control is still held, it returns `.suppress` and the recording continues.
+
+### 14. Give the paste time to land
+
+`PasteService.paste`:
+1. Writes the transcript and records `NSPasteboard.changeCount`.
+2. Posts ⌘V, then returns right away, so the pipeline goes idle and the next press is accepted.
+3. A background task waits `restoreDelay` (default 500 ms, injectable for tests).
+4. That task restores the previous contents only if `changeCount` is still the recorded value.
+
+The actor keeps one pending restore, with the saved clipboard items and the task. A new `paste` that arrives while a restore is pending cancels that task and reuses its saved items, rather than reading the clipboard, which at that point holds the previous transcript. So the user's original clipboard is what finally comes back. Tests await `waitForPendingRestore()`.
+
+An earlier version of this fix waited inline. That kept the pipeline busy for the whole 500 ms, and presses during that window are ignored by design. In a numbered test, 3 of 10 quick dictations were never recorded; the user had pressed Control within about 20–70 ms of the previous paste finishing.
+
+The old 150 ms wasn't enough for a terminal: it read the clipboard after the restore and got the empty previous clipboard, so the dictation vanished. Skipping the restore when the count changed keeps anything the user copied during the longer wait. If the ⌘V can't be posted, the restore still happens straight away.
+
+*Trade-off:* the transcript sits on the clipboard for 500 ms instead of 150 ms.
 
 ## Risks / Trade-offs
 

@@ -32,6 +32,31 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertFalse(CleanupService.isFaithful(raw: "send it", cleaned: "Sure! Send it."))
     }
 
+    func testConsecutiveSetOffFillersMayBeRemoved() {
+        XCTAssertTrue(CleanupService.isFaithful(raw: "Right, so, we ship it", cleaned: "We ship it."))
+        XCTAssertTrue(CleanupService.isFaithful(raw: "so, like, I think so", cleaned: "I think so."))
+    }
+
+    func testReorderedWordsAreRejected() {
+        XCTAssertFalse(CleanupService.isFaithful(raw: "I did not say it was done", cleaned: "I did say it was not done."))
+    }
+
+    func testIntroducedLineBreakOrShellCharacterIsRejected() {
+        XCTAssertFalse(CleanupService.isFaithful(raw: "list the files", cleaned: "List the files.\n"))
+        XCTAssertFalse(CleanupService.isFaithful(raw: "list the files", cleaned: "List the files; `rm`"))
+        XCTAssertFalse(CleanupService.isFaithful(raw: "list the files", cleaned: "List | the files."))
+    }
+
+    func testPromptExamplesPassTheCheck() {
+        // Following the prompt's own worked examples must never trigger the fallback
+        XCTAssertTrue(CleanupService.isFaithful(raw: "um so I think we should uh maybe ship it or not",
+                                                cleaned: "So I think we should maybe ship it or not."))
+        XCTAssertTrue(CleanupService.isFaithful(raw: "are you, like, coming tomorrow or not",
+                                                cleaned: "Are you coming tomorrow or not?"))
+        XCTAssertTrue(CleanupService.defaultPrompt.contains("Cleaned: So I think we should maybe ship it or not."))
+        XCTAssertTrue(CleanupService.defaultPrompt.contains("Transcript: are you, like, coming tomorrow or not"))
+    }
+
     // MARK: isFaithful — tokenisation
 
     func testPunctuationAndCaseChangesAreAccepted() {
