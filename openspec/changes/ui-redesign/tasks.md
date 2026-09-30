@@ -34,5 +34,6 @@
 - [x] 6.1 Offscreen renders of every screen in light and dark (temporary test, not committed), reviewed against this design
 - [ ] 6.2 Unit tests pass; XCUITest smoke test: the popover opens and Settings opens on General
 - [ ] 6.3 Developer: dictate into three apps and watch the capsule (levels, "Transcribing…", fade, never steals focus); full-screen app; Reduce Motion on
+- [ ] 6.7 Developer: click Settings twice with it open (and press ⌘,); only one Settings window, brought to front; the same for the first-run window
 - [ ] 6.4 Developer: fresh first run end to end (reset `setupComplete`), including the live test
 - [ ] 6.5 Rebase onto `model-upgrade` once it merges: swap in `ModelInstaller` and `ModelRegistry.recommended(forPhysicalMemory:)`

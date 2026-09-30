@@ -39,6 +39,15 @@ The system SHALL provide a native macOS Settings window, opened from the popover
 - **WHEN** the user clicks Settings in the popover
 - **THEN** the Settings window opens on the General tab, or the last tab used, and comes to the front
 
+#### Scenario: User clicks Settings again while it's open
+- **GIVEN** the Settings window is already open, possibly behind other windows
+- **WHEN** the user clicks Settings in the popover again, or presses ⌘,
+- **THEN** that same window comes to the front, and no second Settings window opens
+
+#### Scenario: User closes Settings
+- **WHEN** the user closes the Settings window and later clicks Settings again
+- **THEN** a single Settings window opens
+
 #### Scenario: User searches history
 - **WHEN** the user types "invoice" into the History search field
 - **THEN** only transcripts containing "invoice" (ignoring case and accents) are listed
