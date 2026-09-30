@@ -43,11 +43,19 @@ On the developer's Mac, the median time spent in cleanup for a one-sentence dict
 ---
 
 ### Requirement: Unambiguous fillers never reach the paste
-After cleanup, and also when cleanup is off or falls back, the system SHALL remove "um", "umm", "uh" and "hmm" (as whole words, not inside words like "uh-huh") from the text before pasting, whatever the model returned.
+When the transcript's language is English, the system SHALL remove "um", "umm", "uh" and "hmm" (as whole words, not inside words like "uh-huh") from the text before pasting, whatever the model returned, including when cleanup is off or falls back. For any other language these are not treated as fillers: they SHALL be kept, and the faithfulness check SHALL treat every word of a non-English transcript as content, because "um" is a real word in German ("um 5 Uhr") and Portuguese ("um carro").
 
 #### Scenario: Model leaves a filler in
-- **WHEN** the model returns "I think we should uh ship it"
+- **WHEN** the model returns "I think we should uh ship it" for an English dictation
 - **THEN** "I think we should ship it" is pasted
+
+#### Scenario: German dictation
+- **WHEN** Whisper transcribes "Ich komme um 5 Uhr" with language German
+- **THEN** "um" is kept in the pasted text, and a cleanup output that drops it is rejected
+
+#### Scenario: Portuguese dictation
+- **WHEN** Whisper transcribes "Comprei um carro" with language Portuguese
+- **THEN** "um" is kept in the pasted text
 
 ---
 

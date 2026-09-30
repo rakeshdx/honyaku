@@ -10,7 +10,7 @@ protocol ASRService: Sendable {
 // MARK: - Cleanup
 
 protocol CleanupServiceProtocol: Sendable {
-    func clean(_ rawText: String, prompt: String) async throws -> String
+    func clean(_ rawText: String, prompt: String, englishFillers: Bool) async throws -> String
 }
 
 // MARK: - Diarization

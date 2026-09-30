@@ -182,6 +182,25 @@ On short clips, Whisper's per-dictation language detection is unreliable. In tes
 - **Parakeet** ignores it.
 - **UI on this branch:** a `Picker` in the existing Settings Models section, disabled with an explanatory caption when the selected speech model is English-only. `ui-redesign` moves it into its Dictation tab when it rebases (its task 6.5).
 
+### 11. Review fixes (third pass)
+
+- **English-only fillers:** `TranscriptionResult.language` (Parakeet reports "en"; Whisper reports the detected or chosen language) decides whether um/umm/uh/hmm and the set-off English fillers are treated as removable. The pipeline passes `englishFillers: language.hasPrefix("en")` to `CleanupService.clean` (fallback), to `isFaithful` and to the final `removeUnambiguousFillers` pass. For any other language every word is content, because "um" is German ("um 5 Uhr") and Portuguese ("um carro").
+- **Migrated models download at launch:**
+  - `AppState.resolvedSelection` records which keys it migrated in `AppState.migratedSelectionKeys`, since property initialisers can't reach each other.
+  - `TranscriptionPipeline.warmUp()` starts `ModelDownloads.start(_:)` for each migrated selection that isn't installed. `ModelDownloads` is a small `@MainActor` coordinator owned by the pipeline, which publishes `AppState.modelDownloads` (model ID → 0…1) and removes an entry on completion. A failure becomes a status message.
+  - **A dictation never downloads inline any more.** If the speech model isn't installed, the pipeline starts (or joins) the background download, deletes the temp WAV, and sets the status to "Downloading <name>, N%" at once. If the cleanup model isn't installed, cleanup is skipped and it is downloaded in the background too.
+  - This deliberately differs from "warm-up never fetches": warm-up still only loads local models. A migration download is a separate, visible download.
+  - The old popover shows `AppState.modelDownloads` as a status line. **ui-redesign task 6.5 must render `AppState.modelDownloads`** in its header and capsule on rebase.
+- **Single-flight installs:** `ModelInstaller.install` keeps `installing[modelID]`, so concurrent calls await one task and `force` is only decided by the first. An injectable install step lets a unit test prove two concurrent calls run one install.
+- **Parakeet re-fetch:** if a complete-looking Parakeet folder fails to load and fetching is allowed, it is re-downloaded with `force: true` and loaded again. Warm-up (fetch not allowed) still only throws.
+- **Migration by memory:** `migratedID(_:physicalMemory:)` caps a cleanup target at `recommended(forPhysicalMemory:).cleanup`.
+- **Delete guards:** `ModelInstaller.delete` refuses empty repo, variant or ID values and any ".." component.
+- **Smaller fixes:**
+  - Parakeet segments go through `stripNonSpeech`.
+  - `isMLXComplete` also requires `tokenizer.json`.
+  - A cleanup timeout bumps `PromptPrefixCache.generation`, so a generation still running after the timeout can't store its cache back.
+  - Resources are declared with `buildPhase: resources`, so `ThirdPartyNotices.md` and `PrivacyInfo.xcprivacy` are bundled. The privacy manifest had been missing from the app since before this branch.
+
 ## Risks / Trade-offs
 
 - **[Risk] Parakeet and Whisper both compile for the Neural Engine at first load (seconds to minutes).** → Compile at install time (Decision 4). Launch warm-up loads a compiled model.
@@ -209,7 +228,7 @@ Measured on the developer's Mac (M3 Max, 36 GB, macOS 26.6.2) on 2026-09-30, wit
 | qwen3-1.7b | 8/8 | 4/4 | 1250 ms | 158 ms | 174 ms |
 | qwen3-4b-2507 | 8/8 | 4/4 | 1389 ms | 307 ms | 334 ms |
 
-**Multilingual:** with WhisperKit's default options, the multilingual model translated Japanese and Italian dictations into English, because the defaults start every decode with `<|en|>` (`detectLanguage` defaults to false while `usePrefillPrompt` is true). `decodeOptions` now always sets `detectLanguage: true`. The benchmark renders Italian and French clips with `say` and checks the output isn't translated: Italian came back exact ("Dov'è la stazione dei treni?"), and French came back in French, though with a mis-heard phrase from the synthetic voice.
+**Multilingual:** with WhisperKit's default options, the multilingual model translated Japanese and Italian dictations into English, because the defaults start every decode with `<|en|>` (`detectLanguage` defaults to false while `usePrefillPrompt` is true). `decodeOptions` now always sets `detectLanguage: true` when no language is chosen (Decision 10 added the chosen-language path). The benchmark renders Italian and French clips with `say` and checks the output isn't translated: Italian came back exact ("Dov'è la stazione dei treni?"), and French came back in French, though with a mis-heard phrase from the synthetic voice.
 
 **Defaults confirmed:**
 - Parakeet for speech on every Mac: better accuracy than Whisper, and about 15× faster.

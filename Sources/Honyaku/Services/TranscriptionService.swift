@@ -84,8 +84,11 @@ actor TranscriptionService: ASRService {
             do {
                 return try await ParakeetEngine.load(from: folder)
             } catch {
+                // An unloadable local copy counts as missing, as for Whisper; warm-up never re-fetches
                 log.error("Local speech model failed to load (\(String(describing: type(of: error)), privacy: .public))")
-                throw error
+                guard allowFetch else { throw error }
+                try await ModelInstaller.shared.install(info, force: true) { _ in }
+                return try await ParakeetEngine.load(from: folder)
             }
         case .whisperKit:
             guard let variant = info.whisperVariant else { throw TranscriptionError.modelNotLoaded }
@@ -149,15 +152,14 @@ actor TranscriptionService: ASRService {
     }
 
     /// Decoding options for a clip.
-    /// - Language: detection is always on. WhisperKit's defaults start every decode with `<|en|>`, which
-    ///   makes a multilingual model translate Japanese or Italian into English instead of transcribing it.
-    ///   English-only models skip detection themselves.
+    /// - Language: a chosen language code is passed through with detection off, so a short phrase can't be
+    ///   mistaken for another language. With `nil`, detection is on: WhisperKit's defaults would start every
+    ///   decode with `<|en|>`, making a multilingual model translate Japanese or Italian into English instead
+    ///   of transcribing it. English-only models skip detection themselves.
     /// - End trim: WhisperKit only decodes while more than `windowClipTime` (default 1 s) remains, so a clip
     ///   of 1 s or less would be skipped. The trim also stops a trailing sliver after the last timestamp
     ///   being decoded alone (where Whisper invents "Thank you."), so it's only shrunk for clips too short
     ///   to decode, to just under the clip length.
-    /// - Language: a chosen language code is passed through, so a short phrase can't be mistaken for
-    ///   another language; `nil` means detect per dictation.
     static func decodeOptions(forDurationSeconds duration: Double?, language: String? = nil) -> DecodingOptions {
         var options = DecodingOptions()
         options.language = language

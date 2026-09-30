@@ -41,7 +41,7 @@ final class TranscriptionDecodeOptionsTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(ModelRegistry.model(id: "parakeet-tdt-v2")).supportsDictationLanguage)
     }
 
-    func testLanguageIsAlwaysDetected() {
+    func testLanguageIsDetectedWhenNoneIsChosen() {
         // WhisperKit's default forces <|en|>, which makes the multilingual model translate into English
         XCTAssertFalse(DecodingOptions().detectLanguage, "Precondition: WhisperKit's default doesn't detect")
         for duration in [0.5, 3, nil] as [Double?] {

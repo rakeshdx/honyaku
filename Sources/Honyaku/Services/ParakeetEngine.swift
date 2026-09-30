@@ -59,10 +59,12 @@ struct ParakeetEngine: SpeechEngine {
         var current: [SpokenWord] = []
 
         func flush() {
+            defer { current = [] }
             guard let first = current.first, let last = current.last else { return }
-            segments.append(TimedSegment(startSeconds: first.start, endSeconds: last.end,
-                                         text: current.map(\.text).joined(separator: " ")))
-            current = []
+            // Same annotation filter as the full text, so speaker-labelled output can't reintroduce one
+            let text = TranscriptionService.stripNonSpeech(current.map(\.text).joined(separator: " "))
+            guard !text.isEmpty else { return }
+            segments.append(TimedSegment(startSeconds: first.start, endSeconds: last.end, text: text))
         }
 
         for word in words {

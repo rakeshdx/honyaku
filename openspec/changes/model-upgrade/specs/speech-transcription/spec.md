@@ -34,8 +34,8 @@ The system SHALL offer the following speech models:
 - **THEN** Whisper large-v3-turbo transcribes it in French
 
 #### Scenario: Model files are not yet downloaded
-- **WHEN** the selected speech model is not in local model storage
-- **THEN** the system fetches it on first use (see privacy), or the user can download it in Settings, before transcribing
+- **WHEN** the selected speech model is not in local model storage and the user dictates
+- **THEN** the system starts downloading it in the background and the dictation returns straight away with a message naming the model and its progress; dictations work once it's installed (the user can also download it in Settings)
 
 ---
 

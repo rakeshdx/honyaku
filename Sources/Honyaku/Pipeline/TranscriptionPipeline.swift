@@ -10,10 +10,12 @@ final class TranscriptionPipeline {
     private let paste = PasteService()
     private let transcriptStore: TranscriptStore
     private let appState: AppState
+    private let downloads: ModelDownloads
 
     init(appState: AppState, transcriptStore: TranscriptStore) {
         self.appState = appState
         self.transcriptStore = transcriptStore
+        downloads = ModelDownloads(appState: appState)
         audioCapture.prepare()
         audioCapture.onDeviceDisconnected = { [weak self] in
             Task { @MainActor in
@@ -39,6 +41,13 @@ final class TranscriptionPipeline {
     func warmUp() {
         let modelID = appState.selectedSpeechModelID
         let cleanupEnabled = appState.cleanupEnabled
+        // A migration picked models that may not be on disk yet: fetch them now, visibly, rather than
+        // on the first dictation. Warm-up itself still never downloads.
+        let migrated: [String: String] = ["selectedSpeechModelID": modelID,
+                                          "selectedCleanupModelID": appState.selectedCleanupModelID]
+        for (key, id) in migrated where AppState.migratedSelectionKeys.contains(key) {
+            if let model = ModelRegistry.model(id: id) { downloads.start(model) }
+        }
         Task {
             try? await transcription.prepareIfDownloaded(modelID: modelID)
             if cleanupEnabled { try? await cleanup.prepare() }
@@ -101,7 +110,16 @@ final class TranscriptionPipeline {
         // Step 1: ASR (the service deletes audioURL on return; Parakeet reads the float samples directly)
         // Read the saved choice each time, as cleanup does, so switching models in Settings applies at once
         let modelID = UserDefaults.standard.string(forKey: "selectedSpeechModelID") ?? appState.selectedSpeechModelID
+        // A missing model downloads in the background; this dictation returns rather than waiting minutes
+        if let speechModel = ModelRegistry.model(id: modelID), !ModelInstaller.isInstalled(speechModel) {
+            TranscriptionService.deleteTempFile(audioURL)
+            downloads.start(speechModel)
+            appState.setError(downloads.message(for: speechModel))
+            return
+        }
         let result = try await transcription.transcribe(audioURL: audioURL, samples16k: floatArray, modelID: modelID)
+        // um/uh are fillers in English only — "um" is a word in German and Portuguese
+        let englishFillers = result.language.lowercased().hasPrefix("en")
 
         // Empty / silence → discard
         guard !result.rawText.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -130,9 +148,14 @@ final class TranscriptionPipeline {
         // Step 3: Cleanup (optional)
         let cleanupPrompt = UserDefaults.standard.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt
         var finalText = labeledText
-        if appState.cleanupEnabled {
+        let cleanupModel = ModelRegistry.model(
+            id: UserDefaults.standard.string(forKey: "selectedCleanupModelID") ?? appState.selectedCleanupModelID)
+        if appState.cleanupEnabled, let cleanupModel, !ModelInstaller.isInstalled(cleanupModel) {
+            // Paste the speaker's words now; cleanup resumes once its model is downloaded
+            downloads.start(cleanupModel)
+        } else if appState.cleanupEnabled {
             do {
-                let cleaned = try await cleanup.clean(labeledText, prompt: cleanupPrompt)
+                let cleaned = try await cleanup.clean(labeledText, prompt: cleanupPrompt, englishFillers: englishFillers)
                 let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
                 finalText = trimmed.isEmpty ? labeledText : trimmed
             } catch {
@@ -141,8 +164,8 @@ final class TranscriptionPipeline {
             }
         }
 
-        // um/umm/uh/hmm are never content, whatever the model (or no model) left in
-        finalText = CleanupService.removeUnambiguousFillers(finalText)
+        // In English, um/umm/uh/hmm are never content, whatever the model (or no model) left in
+        if englishFillers { finalText = CleanupService.removeUnambiguousFillers(finalText) }
         guard !finalText.isEmpty else {
             appState.status = .idle
             return

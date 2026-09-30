@@ -40,6 +40,7 @@ final class ModelInstallerTests: XCTestCase {
 
     func testMLXWithAllIndexedShardsIsComplete() throws {
         try write("config.json")
+        try write("tokenizer.json")
         try write("model-00001-of-00002.safetensors")
         try write("model-00002-of-00002.safetensors")
         try writeIndex(["a": "model-00001-of-00002.safetensors", "b": "model-00002-of-00002.safetensors"])
@@ -48,6 +49,7 @@ final class ModelInstallerTests: XCTestCase {
 
     func testMLXMissingShardIsIncomplete() throws {
         try write("config.json")
+        try write("tokenizer.json")
         try write("model-00001-of-00002.safetensors")
         try writeIndex(["a": "model-00001-of-00002.safetensors", "b": "model-00002-of-00002.safetensors"])
         XCTAssertFalse(ModelInstaller.isMLXComplete(at: root), "config.json alone must not count as installed")
@@ -55,9 +57,60 @@ final class ModelInstallerTests: XCTestCase {
 
     func testSingleFileMLXModel() throws {
         try write("config.json")
+        try write("tokenizer.json")
         XCTAssertFalse(ModelInstaller.isMLXComplete(at: root))
         try write("model.safetensors")
         XCTAssertTrue(ModelInstaller.isMLXComplete(at: root))
+    }
+
+    func testMLXWithoutTokenizerIsIncomplete() throws {
+        try write("config.json")
+        try write("model.safetensors")
+        XCTAssertFalse(ModelInstaller.isMLXComplete(at: root), "A download interrupted before the tokenizer can't load")
+    }
+
+    // MARK: Single-flight and delete safety
+
+    func testConcurrentInstallsOfOneModelRunOnce() async throws {
+        let counter = InstallCounter()
+        let installer = ModelInstaller { _, _, _ in
+            await counter.increment()
+            try await Task.sleep(for: .milliseconds(200))
+        }
+        let model = try XCTUnwrap(ModelRegistry.model(id: "qwen3-1.7b"))
+        async let first: Void = installer.install(model) { _ in }
+        async let second: Void = installer.install(model) { _ in }
+        _ = try await (first, second)
+        let runs = await counter.count
+        XCTAssertEqual(runs, 1, "The second install must wait for the first, not start its own")
+    }
+
+    func testSequentialInstallsRunAgain() async throws {
+        let counter = InstallCounter()
+        let installer = ModelInstaller { _, _, _ in await counter.increment() }
+        let model = try XCTUnwrap(ModelRegistry.model(id: "qwen3-1.7b"))
+        try await installer.install(model) { _ in }
+        try await installer.install(model) { _ in }
+        let runs = await counter.count
+        XCTAssertEqual(runs, 2)
+    }
+
+    func testUnsafePathPartsAreRejected() {
+        XCTAssertTrue(ModelInstaller.isSafePathPart("argmaxinc/whisperkit-coreml"))
+        XCTAssertTrue(ModelInstaller.isSafePathPart("openai_whisper-large-v3-v20240930_626MB"))
+        for bad in ["", "/", "..", "a/../b", "a//b", "/abs", "./x"] {
+            XCTAssertFalse(ModelInstaller.isSafePathPart(bad), bad)
+        }
+    }
+
+    func testDeletingAModelWithAnEmptyVariantIsRefused() async throws {
+        let bad = ModelInfo(id: "bad-whisper", type: .speech, engine: .whisperKit, displayName: "Bad",
+                            hfRepoPath: "argmaxinc/whisperkit-coreml", fileNames: [], sizeMB: 1, tier: "x", notes: "",
+                            sha256Checksums: [:], whisperVariant: "")
+        do {
+            try await ModelInstaller().delete(bad)
+            XCTFail("An empty variant names the whole WhisperKit folder and must be refused")
+        } catch {}
     }
 
     // MARK: - Helpers
@@ -82,4 +135,9 @@ final class ModelInstallerTests: XCTestCase {
         let data = try JSONSerialization.data(withJSONObject: ["weight_map": weightMap])
         try data.write(to: root.appending(path: "model.safetensors.index.json"))
     }
+}
+
+private actor InstallCounter {
+    private(set) var count = 0
+    func increment() { count += 1 }
 }

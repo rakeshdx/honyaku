@@ -36,6 +36,15 @@ final class ParakeetEngineTests: XCTestCase {
         XCTAssertEqual(segments[2].startSeconds, 2.0)
     }
 
+    func testAnnotationOnlySegmentIsDropped() {
+        let words = [
+            SpokenWord(text: "*laughs*", start: 0, end: 0.4),
+            SpokenWord(text: "Send", start: 1.5, end: 1.7),
+            SpokenWord(text: "it.", start: 1.7, end: 1.9),
+        ]
+        XCTAssertEqual(ParakeetEngine.segments(from: words).map(\.text), ["Send it."])
+    }
+
     func testNoWordsGivesNoSegments() {
         XCTAssertTrue(ParakeetEngine.segments(from: []).isEmpty)
     }

@@ -96,22 +96,25 @@ enum ModelRegistry {
         return ("parakeet-tdt-v2", cleanup)
     }
 
-    /// The model that replaces a retired one, so saved selections survive the lineup change.
-    static func migratedID(_ id: String) -> String? {
+    /// The model that replaces a retired one, so saved selections survive the lineup change. A cleanup
+    /// replacement is never larger than the recommendation for the Mac's memory (8 GB Macs get the 1.7B).
+    static func migratedID(_ id: String,
+                           physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> String? {
         switch id {
         case "whisper-tiny-en", "whisper-small-en":            return "parakeet-tdt-v2"
         case "whisper-small-multilingual":                     return "whisper-large-v3-turbo"
         case "qwen-1.5b-mlx":                                  return "qwen3-1.7b"
-        case "qwen-3b-mlx", "qwen-7b-mlx", "qwen-0.8b":        return "qwen3-4b-2507"
+        case "qwen-3b-mlx", "qwen-7b-mlx", "qwen-0.8b":        return recommended(forPhysicalMemory: physicalMemory).cleanup
         default:                                               return nil
         }
     }
 
     /// A saved selection resolved to a current model: retired IDs are migrated, unknown ones fall back.
-    static func resolvedID(_ saved: String?, fallback: String) -> String {
+    static func resolvedID(_ saved: String?, fallback: String,
+                           physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> String {
         guard let saved else { return fallback }
         if model(id: saved) != nil { return saved }
-        return migratedID(saved) ?? fallback
+        return migratedID(saved, physicalMemory: physicalMemory) ?? fallback
     }
 
     static var defaultSpeechModelID: String {

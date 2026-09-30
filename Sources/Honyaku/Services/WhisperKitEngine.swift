@@ -31,7 +31,8 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         )
         return TranscriptionResult(
             rawText: fullText,
-            language: first.language,
+            // With a language chosen WhisperKit reports its default ("en"), not the language it was given
+            language: language ?? first.language,
             durationSeconds: duration,
             timedSegments: timed
         )

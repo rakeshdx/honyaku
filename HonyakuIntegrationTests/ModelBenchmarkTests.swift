@@ -28,6 +28,14 @@ final class ModelBenchmarkTests: IntegrationTestBase {
     // MARK: - Speech
 
     func testSpeechEngines() async throws {
+        // The test host shares the app's settings: run with Auto-detect, and put the user's choice back after
+        let languageKey = TranscriptionService.dictationLanguageKey
+        let savedLanguage = UserDefaults.standard.object(forKey: languageKey)
+        UserDefaults.standard.set("", forKey: languageKey)
+        defer {
+            if let savedLanguage { UserDefaults.standard.set(savedLanguage, forKey: languageKey) }
+            else { UserDefaults.standard.removeObject(forKey: languageKey) }
+        }
         let clips = try Self.sentences.enumerated().map { try Self.renderSpeech($0.element, name: "clip\($0.offset)") }
         var report = ["| Speech model | WER | Median time | Slowest |", "|---|---|---|---|"]
         var measuredAny = false
@@ -69,10 +77,10 @@ final class ModelBenchmarkTests: IntegrationTestBase {
                 }
 
                 // With the language chosen, a short phrase can't be mistaken for another language
-                UserDefaults.standard.set("it", forKey: TranscriptionService.dictationLanguageKey)
-                defer { UserDefaults.standard.removeObject(forKey: TranscriptionService.dictationLanguageKey) }
+                UserDefaults.standard.set("it", forKey: languageKey)
                 let short = try Self.renderSpeech("Dov'è la stazione?", name: "foreign-short-it", voice: "Alice")
                 let heard = try await transcribe(short, with: service, model: model)
+                UserDefaults.standard.set("", forKey: languageKey)
                 print("Foreign, \(model.id), Italian chosen: \(heard)")
                 XCTAssertTrue(heard.lowercased().contains("stazione"), "Italian chosen, got: \(heard)")
             }

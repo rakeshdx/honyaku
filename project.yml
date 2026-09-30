@@ -29,9 +29,11 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: Sources/Honyaku
-    resources:
-      - Sources/Resources/PrivacyInfo.xcprivacy
-      - Sources/Resources/ThirdPartyNotices.md
+      # XcodeGen has no target-level `resources:` key, so these must be sources with a resources phase
+      - path: Sources/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      - path: Sources/Resources/ThirdPartyNotices.md
+        buildPhase: resources
     # Debug signing comes from the xcconfig (optionally overridden by git-ignored Config/Local.xcconfig)
     configFiles:
       Debug: Config/Debug.xcconfig

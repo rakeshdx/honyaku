@@ -8,7 +8,7 @@ Honyaku is a native macOS menu bar app that converts speech to clean, intelligen
 
 - **Hold ⌃ Control** to record; release to transcribe and paste
 - **Local speech models** — NVIDIA Parakeet for English, Whisper large-v3-turbo for 99 languages
-- **Local LLM cleanup** — removes filler words (um, uh, like), false starts, self-corrections
+- **Local LLM cleanup** — removes English filler words (um, uh, and "like" when set off by commas) and adds punctuation, without changing any other word
 - **Speaker diarization** — identify multiple speakers with `[Speaker 1]`, `[Speaker 2]` labels
 - **Menu bar only** — no Dock icon; lives quietly in your status bar
 - **100% private** — all models run on-device; no analytics, no telemetry, no cloud
@@ -67,7 +67,7 @@ Apple Silicon is required for:
 | **Qwen3 1.7B 4-bit MLX** | ~970 MB | Macs with less than 16 GB of memory |
 | **Qwen3 4B Instruct 2507 4-bit MLX** | ~2.3 GB | Macs with 16 GB or more |
 
-Selections of older models (Whisper tiny/small, Qwen 2.5) move to the nearest new model automatically; the old files stay on disk until you delete them in Settings.
+Selections of older models (Whisper tiny/small, Qwen 2.5) move to the nearest new model automatically, and the new model downloads in the background at launch with its progress shown in the menu bar popover. The old files stay on disk; Settings will offer to delete them in the upcoming redesign. Until then you can remove them from `~/Library/Application Support/Honyaku/Models` (Qwen 2.5) and `~/Documents/huggingface/models/argmaxinc/whisperkit-coreml` (old Whisper variants).
 
 Cleanup runs with **temperature 0.0** (greedy decoding) for deterministic, faithful output — the model removes fillers without paraphrasing or inventing content.
 

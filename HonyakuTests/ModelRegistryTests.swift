@@ -28,9 +28,16 @@ final class ModelRegistryTests: XCTestCase {
         XCTAssertEqual(ModelRegistry.migratedID("whisper-small-en"), "parakeet-tdt-v2")
         XCTAssertEqual(ModelRegistry.migratedID("whisper-small-multilingual"), "whisper-large-v3-turbo")
         XCTAssertEqual(ModelRegistry.migratedID("qwen-1.5b-mlx"), "qwen3-1.7b")
-        XCTAssertEqual(ModelRegistry.migratedID("qwen-3b-mlx"), "qwen3-4b-2507")
-        XCTAssertEqual(ModelRegistry.migratedID("qwen-7b-mlx"), "qwen3-4b-2507")
+        XCTAssertEqual(ModelRegistry.migratedID("qwen-3b-mlx", physicalMemory: 36 * gib), "qwen3-4b-2507")
+        XCTAssertEqual(ModelRegistry.migratedID("qwen-7b-mlx", physicalMemory: 16 * gib), "qwen3-4b-2507")
         XCTAssertNil(ModelRegistry.migratedID("qwen3-1.7b"), "Current models don't migrate")
+    }
+
+    func testMigrationNeverExceedsTheMemoryRecommendation() {
+        for old in ["qwen-3b-mlx", "qwen-7b-mlx", "qwen-0.8b"] {
+            XCTAssertEqual(ModelRegistry.migratedID(old, physicalMemory: 8 * gib), "qwen3-1.7b", old)
+        }
+        XCTAssertEqual(ModelRegistry.resolvedID("qwen-3b-mlx", fallback: "x", physicalMemory: 8 * gib), "qwen3-1.7b")
     }
 
     func testEveryMigrationTargetExists() {
@@ -43,18 +50,22 @@ final class ModelRegistryTests: XCTestCase {
 
     func testResolvedIDKeepsCurrentMigratesRetiredAndFallsBack() {
         XCTAssertEqual(ModelRegistry.resolvedID("whisper-large-v3-turbo", fallback: "x"), "whisper-large-v3-turbo")
-        XCTAssertEqual(ModelRegistry.resolvedID("qwen-3b-mlx", fallback: "x"), "qwen3-4b-2507")
+        XCTAssertEqual(ModelRegistry.resolvedID("qwen-3b-mlx", fallback: "x", physicalMemory: 36 * gib), "qwen3-4b-2507")
         XCTAssertEqual(ModelRegistry.resolvedID("no-such-model", fallback: "qwen3-1.7b"), "qwen3-1.7b")
         XCTAssertEqual(ModelRegistry.resolvedID(nil, fallback: "qwen3-1.7b"), "qwen3-1.7b")
     }
 
     @MainActor
     func testSavedRetiredSelectionIsMigratedAndWrittenBack() throws {
-        let defaults = try XCTUnwrap(UserDefaults(suiteName: "honyaku-migration-test-\(UUID())"))
+        let suite = "honyaku-migration-test-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set("qwen-3b-mlx", forKey: "selectedCleanupModelID")
         let resolved = AppState.resolvedSelection(key: "selectedCleanupModelID", fallback: "qwen3-1.7b", defaults: defaults)
-        XCTAssertEqual(resolved, "qwen3-4b-2507")
-        XCTAssertEqual(defaults.string(forKey: "selectedCleanupModelID"), "qwen3-4b-2507",
+        let expected = ModelRegistry.recommended(forPhysicalMemory: ProcessInfo.processInfo.physicalMemory).cleanup
+        XCTAssertEqual(resolved, expected)
+        XCTAssertTrue(AppState.migratedSelectionKeys.contains("selectedCleanupModelID"))
+        XCTAssertEqual(defaults.string(forKey: "selectedCleanupModelID"), expected,
                        "CleanupService reads UserDefaults directly, so the migration must be saved")
     }
 

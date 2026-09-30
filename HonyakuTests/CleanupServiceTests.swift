@@ -57,6 +57,15 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertTrue(CleanupService.defaultPrompt.contains("Transcript: are you, like, coming tomorrow or not"))
     }
 
+    func testUmIsContentOutsideEnglish() {
+        // German "um 5 Uhr" (at five) and Portuguese "um carro" (a car)
+        XCTAssertFalse(CleanupService.isFaithful(raw: "Ich komme um 5 Uhr", cleaned: "Ich komme 5 Uhr.", englishFillers: false))
+        XCTAssertTrue(CleanupService.isFaithful(raw: "Ich komme um 5 Uhr", cleaned: "Ich komme um 5 Uhr.", englishFillers: false))
+        XCTAssertFalse(CleanupService.isFaithful(raw: "Comprei um carro", cleaned: "Comprei carro.", englishFillers: false))
+        // English still treats it as a filler
+        XCTAssertTrue(CleanupService.isFaithful(raw: "um I think so", cleaned: "I think so.", englishFillers: true))
+    }
+
     // MARK: isFaithful — tokenisation
 
     func testPunctuationAndCaseChangesAreAccepted() {

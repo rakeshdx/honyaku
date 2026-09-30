@@ -45,7 +45,9 @@ actor CleanupService: CleanupServiceProtocol {
         transcript.contains("[Speaker ") ? base + "\n" + speakerLabelRule : base
     }
 
-    func clean(_ rawText: String, prompt: String) async throws -> String {
+    /// `englishFillers`: whether um/uh and the set-off English fillers may be dropped. Only for English
+    /// transcripts: "um" is a real word in German and Portuguese.
+    func clean(_ rawText: String, prompt: String, englishFillers: Bool = true) async throws -> String {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return rawText
         }
@@ -59,10 +61,10 @@ actor CleanupService: CleanupServiceProtocol {
                     reuse: promptCache)
                 if cleaned.isEmpty { return rawText }
                 // Never trust the model with the user's words: if it lost or added any, keep theirs
-                guard CleanupService.isFaithful(raw: rawText, cleaned: cleaned) else {
+                guard CleanupService.isFaithful(raw: rawText, cleaned: cleaned, englishFillers: englishFillers) else {
                     // Transcript text is never logged
                     CleanupService.log.info("Cleanup output changed the transcript's words; using raw transcript")
-                    return CleanupService.removeUnambiguousFillers(rawText)
+                    return englishFillers ? CleanupService.removeUnambiguousFillers(rawText) : rawText
                 }
                 return cleaned
             }
@@ -70,9 +72,15 @@ actor CleanupService: CleanupServiceProtocol {
                 try await Task.sleep(for: .seconds(self.timeoutSeconds))
                 throw CleanupError.timedOut
             }
-            let result = try await group.next()!
-            group.cancelAll()
-            return result
+            do {
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
+            } catch {
+                // A generation still running after a timeout mustn't hand its cache to the next dictation
+                promptCache.invalidate()
+                throw error
+            }
         }
     }
 
@@ -91,6 +99,7 @@ actor CleanupService: CleanupServiceProtocol {
         let parameters = GenerateParameters(maxTokens: outputTokenLimit(for: rawText), temperature: 0)
         let cacheKey = "\(info.id)\n\(info.disablesThinking)\n\(prompt)"
 
+        let generation = reuse.generation
         let response: String = try await model.perform { context in
             func tokens(for transcript: String) async throws -> [Int] {
                 let input = UserInput(chat: [.system(prompt), .user(frame(transcript))], additionalContext: templateContext)
@@ -125,8 +134,9 @@ actor CleanupService: CleanupServiceProtocol {
                 if case .chunk(let chunk) = item { text += chunk }
             }
 
-            // Drop this dictation from the cache, keeping only the shared prefix for the next one
-            if !prefix.isEmpty, full.starts(with: prefix), canTrimPromptCache(cache),
+            // Drop this dictation from the cache, keeping only the shared prefix for the next one —
+            // unless the cache was invalidated meanwhile (a timeout), in which case start fresh next time
+            if reuse.generation == generation, !prefix.isEmpty, full.starts(with: prefix), canTrimPromptCache(cache),
                let offset = cache.first?.offset, offset >= prefix.count {
                 for layer in cache { layer.trim(offset - prefix.count) }
                 reuse.cache = cache
@@ -191,10 +201,11 @@ actor CleanupService: CleanupServiceProtocol {
 
     /// True when `cleaned` is `raw` with only deletions — every word kept in order apart from removable
     /// fillers, nothing added or reordered — and introduces no forbidden character.
-    static func isFaithful(raw: String, cleaned: String) -> Bool {
+    /// With `englishFillers` off (a non-English transcript) no word counts as a filler.
+    static func isFaithful(raw: String, cleaned: String, englishFillers: Bool = true) -> Bool {
         let rawWords = words(in: raw)
         let cleanedWords = words(in: cleaned)
-        let required = words(in: removableFillersStripped(raw))
+        let required = englishFillers ? words(in: removableFillersStripped(raw)) : rawWords
         let introducesForbidden = cleaned.unicodeScalars.contains {
             forbiddenIntroduced.contains($0) && !raw.unicodeScalars.contains($0)
         }
@@ -259,4 +270,12 @@ final class PromptPrefixCache: @unchecked Sendable {
     var key: String?
     var prefix: [Int] = []
     var cache: [KVCache]?
+    /// Bumped by `invalidate()`; a generation that started before the bump never stores its cache back.
+    var generation = 0
+
+    func invalidate() {
+        generation += 1
+        key = nil
+        cache = nil
+    }
 }

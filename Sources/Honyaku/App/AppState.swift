@@ -6,6 +6,8 @@ import Observation
 final class AppState {
     var status: AppStatus = .idle
     var lastError: String?
+    /// Background model downloads in progress: model ID → 0…1.
+    var modelDownloads: [String: Double] = [:]
 
     // Feature toggles (backed by UserDefaults via AppStorage in views,
     // mirrored here for pipeline access).
@@ -40,9 +42,16 @@ final class AppState {
                                               defaults: UserDefaults = .standard) -> String {
         let saved = defaults.string(forKey: key)
         let resolved = ModelRegistry.resolvedID(saved, fallback: fallback)
-        if saved != nil, saved != resolved { defaults.set(resolved, forKey: key) }
+        if saved != nil, saved != resolved {
+            defaults.set(resolved, forKey: key)
+            migratedSelectionKeys.insert(key)
+        }
         return resolved
     }
+
+    /// Selections migrated from a retired model this launch, so the pipeline can fetch the new models
+    /// straight away. A static because property initialisers can't reach the instance.
+    nonisolated(unsafe) static var migratedSelectionKeys: Set<String> = []
 
     func setError(_ message: String) {
         status = .error(message)

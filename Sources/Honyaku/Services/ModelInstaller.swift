@@ -14,6 +14,20 @@ actor ModelInstaller {
     static let shared = ModelInstaller()
     private static let log = Logger(subsystem: "com.honyaku.app", category: "models")
 
+    typealias InstallStep = @Sendable (_ model: ModelInfo, _ force: Bool,
+                                       _ progress: @escaping @Sendable (Double) -> Void) async throws -> Void
+    private let installStep: InstallStep
+    /// In-flight installs by model ID, so a second request waits for the first rather than racing it
+    /// (a forced Parakeet download deletes the folder another download is writing to).
+    private var installing: [String: Task<Void, Error>] = [:]
+
+    /// `installStep` is for tests; the default downloads, compiles and verifies the real model.
+    init(installStep: InstallStep? = nil) {
+        self.installStep = installStep ?? { model, force, progress in
+            try await ModelInstaller.download(model, force: force, progress: progress)
+        }
+    }
+
     // MARK: - State
 
     func state(of model: ModelInfo) -> InstallState {
@@ -49,15 +63,29 @@ actor ModelInstaller {
     // MARK: - Install
 
     /// Downloads a model and loads it once, so any Neural Engine compile happens now rather than on the
-    /// first dictation. `progress` reports 0…1 on an arbitrary thread.
-    func install(_ model: ModelInfo, progress: @escaping @Sendable (Double) -> Void) async throws {
+    /// first dictation. `progress` reports 0…1 on an arbitrary thread. A concurrent install of the same
+    /// model waits for the one already running (its progress goes to the first caller only).
+    /// `force` re-downloads files that are present but won't load.
+    func install(_ model: ModelInfo, force: Bool = false,
+                 progress: @escaping @Sendable (Double) -> Void) async throws {
+        if let running = installing[model.id] { return try await running.value }
+        // Decided once, by the install that actually runs
+        let force = force || ModelInstaller.state(of: model) == .incomplete
+        let step = installStep
+        let task = Task { try await step(model, force, progress) }
+        installing[model.id] = task
+        defer { installing[model.id] = nil }
+        try await task.value
+    }
+
+    private static func download(_ model: ModelInfo, force: Bool,
+                                 progress: @escaping @Sendable (Double) -> Void) async throws {
         switch model.engine {
         case .speakerKit:
             progress(1)
         case .parakeet:
             let folder = ModelInstaller.parakeetFolder()
-            // FluidAudio returns early on a partial folder unless forced
-            let force = ModelInstaller.state(of: model) == .incomplete
+            // FluidAudio returns early on a partial or unloadable folder unless forced
             try await AsrModels.download(to: folder, force: force, version: .v2) { p in
                 progress(p.fractionCompleted)
             }
@@ -93,12 +121,25 @@ actor ModelInstaller {
             let folder = ModelInstaller.parakeetFolder()
             if fm.fileExists(atPath: folder.path) { try fm.removeItem(at: folder) }
         case .whisperKit:
-            guard let variant = model.whisperVariant else { return }
+            guard let variant = model.whisperVariant,
+                  ModelInstaller.isSafePathPart(variant), ModelInstaller.isSafePathPart(model.hfRepoPath) else {
+                throw ModelDownloadError.fileSystemError(CocoaError(.fileWriteInvalidFileName))
+            }
             let folder = TranscriptionService.localModelFolder(repo: model.hfRepoPath, variant: variant)
             if fm.fileExists(atPath: folder.path) { try fm.removeItem(at: folder) }
         case .mlx:
+            guard ModelInstaller.isSafePathPart(model.id) else {
+                throw ModelDownloadError.fileSystemError(CocoaError(.fileWriteInvalidFileName))
+            }
             try ModelStore.shared.delete(model)
         }
+    }
+
+    /// Delete must only ever remove the model's own folder: an empty value would name the parent folder,
+    /// and ".." could walk out of it.
+    nonisolated static func isSafePathPart(_ value: String) -> Bool {
+        let parts = value.split(separator: "/", omittingEmptySubsequences: false)
+        return !value.isEmpty && !value.hasPrefix("/") && !parts.contains { $0.isEmpty || $0 == ".." || $0 == "." }
     }
 
     // MARK: - Locations and completeness
@@ -122,10 +163,12 @@ actor ModelInstaller {
         return !containsPartialFiles(folder)
     }
 
-    /// An MLX model is whole when `config.json` exists and every weight shard the index names is present.
+    /// An MLX model is whole when `config.json` and `tokenizer.json` exist and every weight shard the index
+    /// names is present.
     nonisolated static func isMLXComplete(at folder: URL) -> Bool {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: folder.appending(path: "config.json").path) else { return false }
+        guard ["config.json", "tokenizer.json"].allSatisfy({ fm.fileExists(atPath: folder.appending(path: $0).path) })
+        else { return false }
         let index = folder.appending(path: "model.safetensors.index.json")
         if let data = try? Data(contentsOf: index),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
