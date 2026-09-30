@@ -32,10 +32,10 @@
 ## 6. Verification
 
 - [x] 6.1 Offscreen renders of every screen in light and dark (temporary test, not committed), reviewed against this design
-- [ ] 6.2 Unit tests pass; XCUITest smoke test: the popover opens and Settings opens on General
-- [ ] 6.3 Developer: dictate into three apps and watch the capsule (levels, "Transcribing…", fade, never steals focus); full-screen app; Reduce Motion on
-- [ ] 6.7 Developer: click Settings twice with it open (and press ⌘,); only one Settings window, brought to front; the same for the first-run window
-- [ ] 6.4 Developer: fresh first run end to end (reset `setupComplete`), including the live test
+- [x] 6.2 Unit tests pass; XCUITest smoke tests (HonyakuUITests scheme): icon exists, click opens Settings on General, second click keeps one window, right-click shows Quit
+- [x] 6.3 Developer: dictate into three apps and watch the capsule (levels, "Transcribing…", fade, never steals focus); full-screen app; Reduce Motion on (full-screen and Reduce Motion not separately confirmed)
+- [x] 6.7 Developer: click Settings twice with it open (and press ⌘,); only one Settings window, brought to front; the same for the first-run window
+- [x] 6.4 Developer: fresh first run end to end (reset `setupComplete`), including the live test
 - [x] 6.5 Rebase onto `model-upgrade` once it merges: swap in `ModelInstaller` and `ModelRegistry.recommended(forPhysicalMemory:)`; Language picker in the Dictation tab; download progress in the popover; "Older models" with Move to Trash (design Decision 10)
 - [x] 6.8 Unit-test `RetiredModelFiles.onDisk` against a temporary folder (known folders only; missing ones skipped)
 
@@ -46,4 +46,4 @@
 - [x] 7.3 `SettingsWindowController` and `FirstRunWindowController`: single AppKit windows hosting the SwiftUI views; reopening brings the same window forward
 - [x] 7.4 General tab status card (keycap, state or full error, model line, background downloads); Models tab shows background download progress
 - [x] 7.5 Remove `MenuBarPopoverView` and its tests; renders of the General tab (idle, recording, error, downloading) reviewed
-- [ ] 7.6 Unit tests pass; developer: left click, right-click menu, Quit, first run while incomplete, one window only, launch-time listener still active
+- [x] 7.6 Unit tests pass; developer: left click, right-click menu, Quit, first run while incomplete, one window only, launch-time listener still active
