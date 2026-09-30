@@ -125,8 +125,6 @@
 
 ## 14. Distribution
 
-- [ ] 14.1 Configure code signing with Developer ID Application certificate
-- [ ] 14.2 Notarise build via `notarytool` in CI (GitHub Actions or Xcode Cloud)
-- [ ] 14.3 Build DMG installer with drag-to-Applications layout
-- [ ] 14.4 Publish first release on GitHub Releases with DMG artifact
+> 14.1–14.4 (signing, notarisation, DMG, GitHub Release) moved to the `release-distribution` change.
+
 - [x] 14.5 Write brief README: installation, permissions, model selection, privacy guarantee
