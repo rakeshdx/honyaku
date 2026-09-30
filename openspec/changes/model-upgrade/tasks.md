@@ -51,6 +51,6 @@
 ## 9. Manual-test follow-ups
 
 - [x] 9.1 Dictation reads the saved speech model each time, so switching in Settings applies without relaunch
-- [ ] 9.2 `dictationLanguage` setting: `decodeOptions(forDurationSeconds:language:)`, `WhisperKitEngine` reads it per dictation; unit tests (chosen language disables detection; nil detects)
-- [ ] 9.3 Settings picker: Auto-detect plus languages by name, disabled with a caption for English-only models
+- [x] 9.2 `dictationLanguage` setting: `decodeOptions(forDurationSeconds:language:)`, `WhisperKitEngine` reads it per dictation; unit tests (chosen language disables detection; nil detects)
+- [x] 9.3 Settings picker: Auto-detect plus languages by name, disabled with a caption for English-only models
 - [ ] 9.4 Benchmark: the Italian clip with the language set to Italian; developer check with short Italian and Japanese phrases

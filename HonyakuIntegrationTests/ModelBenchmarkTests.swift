@@ -67,6 +67,14 @@ final class ModelBenchmarkTests: IntegrationTestBase {
                     print("Foreign, \(model.id), \(voice): \(heard)")
                     XCTAssertTrue(heard.lowercased().contains(word), "\(model.id) should transcribe, not translate: \(heard)")
                 }
+
+                // With the language chosen, a short phrase can't be mistaken for another language
+                UserDefaults.standard.set("it", forKey: TranscriptionService.dictationLanguageKey)
+                defer { UserDefaults.standard.removeObject(forKey: TranscriptionService.dictationLanguageKey) }
+                let short = try Self.renderSpeech("Dov'è la stazione?", name: "foreign-short-it", voice: "Alice")
+                let heard = try await transcribe(short, with: service, model: model)
+                print("Foreign, \(model.id), Italian chosen: \(heard)")
+                XCTAssertTrue(heard.lowercased().contains("stazione"), "Italian chosen, got: \(heard)")
             }
         }
         try XCTSkipUnless(measuredAny, "No speech model is installed")

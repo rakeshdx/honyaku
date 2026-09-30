@@ -21,6 +21,26 @@ final class TranscriptionDecodeOptionsTests: XCTestCase {
         XCTAssertEqual(TranscriptionService.decodeOptions(forDurationSeconds: nil).windowClipTime, defaultTrim)
     }
 
+    func testChosenLanguageIsPassedAndNotDetected() {
+        let options = TranscriptionService.decodeOptions(forDurationSeconds: 2, language: "it")
+        XCTAssertEqual(options.language, "it")
+        XCTAssertFalse(options.detectLanguage)
+        XCTAssertEqual(options.task, .transcribe)
+    }
+
+    func testLanguageListHasOneEntryPerCodeSortedByName() {
+        let languages = TranscriptionService.dictationLanguages
+        XCTAssertEqual(Set(languages.map(\.code)).count, languages.count)
+        XCTAssertEqual(languages.map(\.name), languages.map(\.name).sorted())
+        XCTAssertTrue(languages.contains { $0.name == "Italian" && $0.code == "it" })
+        XCTAssertTrue(languages.contains { $0.name == "Japanese" && $0.code == "ja" })
+    }
+
+    func testOnlyMultilingualWhisperSupportsDictationLanguage() throws {
+        XCTAssertTrue(try XCTUnwrap(ModelRegistry.model(id: "whisper-large-v3-turbo")).supportsDictationLanguage)
+        XCTAssertFalse(try XCTUnwrap(ModelRegistry.model(id: "parakeet-tdt-v2")).supportsDictationLanguage)
+    }
+
     func testLanguageIsAlwaysDetected() {
         // WhisperKit's default forces <|en|>, which makes the multilingual model translate into English
         XCTAssertFalse(DecodingOptions().detectLanguage, "Precondition: WhisperKit's default doesn't detect")

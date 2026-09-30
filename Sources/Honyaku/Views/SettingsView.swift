@@ -11,6 +11,8 @@ struct SettingsView: View {
     @AppStorage("diarizationEnabled") private var diarizationEnabled = false
     @AppStorage("cleanupPrompt") private var cleanupPrompt = CleanupService.defaultPrompt
     @AppStorage("selectedSpeechModelID") private var selectedSpeechModelID = ModelRegistry.defaultSpeechModelID
+    // Empty string means Auto-detect
+    @AppStorage(TranscriptionService.dictationLanguageKey) private var dictationLanguage = ""
     @AppStorage("selectedCleanupModelID") private var selectedCleanupModelID = ModelRegistry.defaultCleanupModelID
 
     @State private var selectedSection: String = "models"
@@ -62,6 +64,18 @@ struct SettingsView: View {
                 ForEach(ModelRegistry.speechModels) { model in
                     ModelSettingsRow(model: model, selectedID: $selectedSpeechModelID)
                 }
+                let multilingual = ModelRegistry.model(id: selectedSpeechModelID)?.supportsDictationLanguage ?? false
+                Picker("Language", selection: $dictationLanguage) {
+                    Text("Auto-detect").tag("")
+                    ForEach(TranscriptionService.dictationLanguages, id: \.code) { language in
+                        Text(language.name).tag(language.code)
+                    }
+                }
+                .disabled(!multilingual)
+                Text(multilingual
+                     ? "Choose the language you speak if short phrases come out in the wrong language."
+                     : "Only the multilingual model uses this. The selected model transcribes English.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Cleanup Model") {
                 ForEach(ModelRegistry.cleanupModels) { model in

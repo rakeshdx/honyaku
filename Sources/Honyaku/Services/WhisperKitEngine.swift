@@ -12,7 +12,10 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
     }
 
     func transcribe(audioURL: URL, samples16k: [Float]?) async throws -> TranscriptionResult {
-        let options = TranscriptionService.decodeOptions(forDurationSeconds: Self.duration(of: audioURL))
+        // Read per dictation so a change in Settings applies at once
+        let language = UserDefaults.standard.string(forKey: TranscriptionService.dictationLanguageKey)
+            .flatMap { $0.isEmpty ? nil : $0 }  // Settings stores Auto-detect as ""
+        let options = TranscriptionService.decodeOptions(forDurationSeconds: Self.duration(of: audioURL), language: language)
         let segments = try await kit.transcribe(audioPath: audioURL.path, decodeOptions: options)
         guard !segments.isEmpty, let first = segments.first else {
             throw TranscriptionError.emptyResult

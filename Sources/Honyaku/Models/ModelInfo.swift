@@ -39,3 +39,10 @@ struct ModelInfo: Codable, Identifiable, Equatable {
         self.whisperVariant = whisperVariant; self.disablesThinking = disablesThinking
     }
 }
+
+extension ModelInfo {
+    /// Whether the dictation-language setting applies: multilingual Whisper models only.
+    var supportsDictationLanguage: Bool {
+        engine == .whisperKit && !(whisperVariant?.hasSuffix(".en") ?? false)
+    }
+}

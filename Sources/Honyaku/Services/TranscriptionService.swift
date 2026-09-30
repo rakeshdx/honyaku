@@ -156,14 +156,31 @@ actor TranscriptionService: ASRService {
     ///   of 1 s or less would be skipped. The trim also stops a trailing sliver after the last timestamp
     ///   being decoded alone (where Whisper invents "Thank you."), so it's only shrunk for clips too short
     ///   to decode, to just under the clip length.
-    static func decodeOptions(forDurationSeconds duration: Double?) -> DecodingOptions {
+    /// - Language: a chosen language code is passed through, so a short phrase can't be mistaken for
+    ///   another language; `nil` means detect per dictation.
+    static func decodeOptions(forDurationSeconds duration: Double?, language: String? = nil) -> DecodingOptions {
         var options = DecodingOptions()
-        options.detectLanguage = true
+        options.language = language
+        options.detectLanguage = language == nil
         if let duration, duration < 1.1 {
             options.windowClipTime = Float(max(0, duration - 0.1))
         }
         return options
     }
+
+    /// UserDefaults key for the multilingual model's dictation language: a Whisper language code, or absent for Auto-detect.
+    static let dictationLanguageKey = "dictationLanguage"
+
+    /// The languages Whisper supports, by display name, one entry per code (the table has aliases).
+    static let dictationLanguages: [(name: String, code: String)] = {
+        var seen = Set<String>()
+        var result: [(name: String, code: String)] = []
+        let byName: [(key: String, value: String)] = Constants.languages.sorted { $0.key < $1.key }
+        for (name, code) in byName where seen.insert(code).inserted {
+            result.append((name: name.capitalized, code: code))
+        }
+        return result
+    }()
 
     /// Transcript text from WhisperKit's window text — which keeps the original spacing, so scripts without
     /// spaces aren't split — with non-speech annotations removed, including segments that are only a
