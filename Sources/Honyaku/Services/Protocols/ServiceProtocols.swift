@@ -23,6 +23,7 @@ protocol DiarizationServiceProtocol: Sendable {
 protocol HotkeyServiceProtocol: AnyObject {
     var onRecordingStarted: (() -> Void)? { get set }
     var onRecordingEnded: (() -> Void)? { get set }
+    var onRecordingCancelled: (() -> Void)? { get set }
     func start() throws
     func stop()
 }
@@ -31,6 +32,21 @@ protocol HotkeyServiceProtocol: AnyObject {
 
 protocol PasteServiceProtocol: Sendable {
     func paste(_ text: String) async throws
+}
+
+// MARK: - Single instance
+
+/// A running copy of the app. `NSRunningApplication` conforms; tests use fakes.
+protocol RunningInstance: AnyObject {
+    var processIdentifier: pid_t { get }
+    var launchDate: Date? { get }
+    var isTerminated: Bool { get }
+    @discardableResult func terminate() -> Bool
+    @discardableResult func forceTerminate() -> Bool
+}
+
+protocol RunningInstanceProviding {
+    func runningInstances(bundleIdentifier: String) -> [RunningInstance]
 }
 
 // MARK: - Model downloading

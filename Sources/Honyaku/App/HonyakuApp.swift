@@ -9,19 +9,25 @@ struct HonyakuApp: App {
     @State private var appState = AppState()
 
     private let hotkeyService = HotkeyService()
+    private let singleInstanceService = SingleInstanceService()
     // Pipeline is created once setup is complete; nil until then.
     @State private var pipeline: TranscriptionPipeline?
 
     var body: some Scene {
-        MenuBarExtra("Honyaku", systemImage: menuBarIcon) {
+        MenuBarExtra {
             MenuBarPopoverView()
                 .environment(appState)
                 .environmentObject(permissionManager)
                 .environmentObject(transcriptStore)
+                // Retry for when Accessibility was granted after launch
                 .onAppear { startPipelineIfReady() }
                 .onChange(of: appState.setupComplete) { _, done in
                     if done { startPipelineIfReady() }
                 }
+        } label: {
+            // The label renders at launch (the popover only on click), so push-to-talk works without opening it
+            Image(systemName: menuBarIcon)
+                .task { startPipelineIfReady() }
         }
         .menuBarExtraStyle(.window)
 
@@ -70,6 +76,9 @@ struct HonyakuApp: App {
             "diarizationEnabled": false,
         ])
 
+        // Newest instance wins: quit any older copies before this one installs its event tap
+        singleInstanceService.start()
+
         // Clean up any orphaned temp audio files from a previous crash
         TranscriptionService.cleanupOrphanedTempFiles()
 
@@ -93,6 +102,8 @@ struct HonyakuApp: App {
     @MainActor
     private func startPipelineIfReady() {
         guard appState.setupComplete else { return }
+        // Unit tests are hosted in the app; a test run must not add a second Control listener or load models
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
 
         // Create the pipeline once
         if pipeline == nil {
@@ -100,17 +111,23 @@ struct HonyakuApp: App {
             pipeline = p
             hotkeyService.onRecordingStarted = { p.startRecording() }
             hotkeyService.onRecordingEnded   = { p.stopRecordingAndProcess() }
+            hotkeyService.onRecordingCancelled = { p.cancelRecording() }
             hotkeyService.setPipelineBusyCheck { appState.status.isBusy }
+            p.warmUp()
         }
 
         // Attempt to start the hotkey tap — retry on every popover open in case
         // accessibility was granted after the previous attempt (requires relaunch in practice)
         guard !AXIsProcessTrusted() else {
-            do {
-                try hotkeyService.start()
-                appState.clearError()
-            } catch {
-                appState.setError("Hotkey registration failed: \(error.localizedDescription). Try relaunching.")
+            Task {
+                // Never install a second tap while an older instance still holds one
+                await singleInstanceService.waitUntilResolved()
+                do {
+                    try hotkeyService.start()
+                    appState.clearError()
+                } catch {
+                    appState.setError("Hotkey registration failed: \(error.localizedDescription). Try relaunching.")
+                }
             }
             return
         }
@@ -120,6 +137,9 @@ struct HonyakuApp: App {
     // MARK: - Login item
 
     private func registerLoginItemIfNeeded() {
+        #if DEBUG
+        // Debug builds run from DerivedData; never make them launch at login
+        #else
         guard !UserDefaults.standard.bool(forKey: "loginItemRegistered") else { return }
         do {
             try SMAppService.mainApp.register()
@@ -127,6 +147,7 @@ struct HonyakuApp: App {
         } catch {
             // Non-fatal; user can enable manually in Settings
         }
+        #endif
     }
 
     // MARK: - Quit cleanup (P1-E / privacy spec)

@@ -14,8 +14,34 @@ final class TranscriptionPipeline {
     init(appState: AppState, transcriptStore: TranscriptStore) {
         self.appState = appState
         self.transcriptStore = transcriptStore
-        audioCapture.onDeviceDisconnected = { [weak appState] in
-            appState?.setError("Microphone disconnected — switched to system default.")
+        audioCapture.prepare()
+        audioCapture.onDeviceDisconnected = { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                switch self.appState.status {
+                case .recording:
+                    // Stop the live engine first; otherwise key-up bails on the error state and the tap leaks
+                    self.cancelRecording()
+                case .transcribing, .processing:
+                    // The in-flight run owns the status; an error here would unblock a new recording
+                    // whose state that run then overwrites, leaving the mic on
+                    return
+                default:
+                    break
+                }
+                self.appState.setError("Microphone disconnected — switched to system default.")
+            }
+        }
+    }
+
+    /// Loads the models in the background so the first dictation after launch isn't slower than the rest.
+    /// Failures are ignored here; a real dictation reports them.
+    func warmUp() {
+        let modelID = appState.selectedSpeechModelID
+        let cleanupEnabled = appState.cleanupEnabled
+        Task {
+            try? await transcription.prepareIfDownloaded(modelID: modelID)
+            if cleanupEnabled { try? await cleanup.prepare() }
         }
     }
 
@@ -54,6 +80,8 @@ final class TranscriptionPipeline {
     }
 
     func cancelRecording() {
+        // Only an active recording is cancelled — never overwrite an error or an in-flight pipeline run
+        guard appState.status == .recording else { return }
         audioCapture.cancelCapture()
         appState.status = .idle
     }

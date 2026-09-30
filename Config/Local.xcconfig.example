@@ -1,0 +1,5 @@
+// Copy to Local.xcconfig (git-ignored) to sign Debug builds with your Apple Development
+// certificate. A free Personal Team works: Xcode → Settings → Accounts.
+CODE_SIGN_STYLE = Automatic
+CODE_SIGN_IDENTITY = Apple Development
+DEVELOPMENT_TEAM = YOUR_TEAM_ID

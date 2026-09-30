@@ -93,6 +93,17 @@ open Honyaku.xcodeproj
 
 Press **⌘R** to build and run.
 
+### Development signing
+
+Debug builds are ad-hoc signed by default, which means macOS forgets the Accessibility grant on every rebuild. To keep it, sign Debug builds with your Apple Development certificate (a free Personal Team works):
+
+1. Add your Apple ID in Xcode → Settings → Accounts, then Manage Certificates → **+** → Apple Development.
+2. Copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` (git-ignored) and set `DEVELOPMENT_TEAM` to your team ID.
+3. Run `xcodegen generate`, then build and run.
+4. One time only: remove the old Honyaku entry from Accessibility (or run `tccutil reset Accessibility com.honyaku.app`) and grant it again. If an earlier Debug build was registered as a login item, remove it in System Settings → General → Login Items.
+
+Debug builds don't register themselves as a login item. Launching a new copy of Honyaku quits any older copy that's still running.
+
 ### Running tests
 
 ```bash

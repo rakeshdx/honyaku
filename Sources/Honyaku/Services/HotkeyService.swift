@@ -6,11 +6,11 @@ import Carbon.HIToolbox
 final class HotkeyService: HotkeyServiceProtocol {
     var onRecordingStarted: (() -> Void)?
     var onRecordingEnded: (() -> Void)?
+    var onRecordingCancelled: (() -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
-    private var keyDownTime: Date?
-    private let minimumHoldSeconds: Double = 0.3
+    private var gesture = PushToTalkGesture()
     private var isPipelineBusy: (() -> Bool) = { false }
 
     func setPipelineBusyCheck(_ check: @escaping () -> Bool) {
@@ -58,43 +58,44 @@ final class HotkeyService: HotkeyServiceProtocol {
     // MARK: - Event handler
 
     private func handle(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
+        if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            // macOS switched the tap off; a release that happened meanwhile was never delivered, so
+            // re-enable and replay the live Control state — otherwise the mic stays on
+            if let eventTap { CGEvent.tapEnable(tap: eventTap, enable: true) }
+            _ = apply(flags: CGEventSource.flagsState(.combinedSessionState))
+            return Unmanaged.passUnretained(event)
+        }
         guard type == .flagsChanged else {
             return Unmanaged.passUnretained(event)
         }
+        return apply(flags: event.flags) ? nil : Unmanaged.passUnretained(event)
+    }
 
-        let flags = event.flags
-        let controlDown = flags.contains(.maskControl)
-        let hasOtherModifiers = flags.contains(.maskCommand) ||
-                                flags.contains(.maskAlternate) ||
-                                flags.contains(.maskShift)
+    /// Runs the gesture for a modifier state and fires the matching callback. Returns true to swallow the event.
+    private func apply(flags: CGEventFlags) -> Bool {
+        let action = gesture.controlChanged(
+            controlDown: flags.contains(.maskControl),
+            otherModifiers: flags.contains(.maskCommand) || flags.contains(.maskAlternate) || flags.contains(.maskShift),
+            now: Date(),
+            pipelineBusy: isPipelineBusy()
+        )
 
-        if controlDown && !hasOtherModifiers {
-            // Control pressed — start recording if not already started.
-            // Treat a stale keyDownTime (>5s) as orphaned from a missed keyup and reset it.
-            if let t = keyDownTime, Date().timeIntervalSince(t) > 5 {
-                keyDownTime = nil
-            }
-            guard keyDownTime == nil else {
-                return nil  // suppress repeat
-            }
-            guard !isPipelineBusy() else {
-                return Unmanaged.passUnretained(event)
-            }
-            keyDownTime = Date()
+        switch action {
+        case .start:
             DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?() }
-            return nil  // suppress bare Control from reaching other apps
-
-        } else if !controlDown, let downTime = keyDownTime {
-            // Control released
-            keyDownTime = nil
-            guard Date().timeIntervalSince(downTime) >= minimumHoldSeconds else {
-                return nil  // too short — discard
-            }
+            return true  // suppress bare Control from reaching other apps
+        case .end:
             DispatchQueue.main.async { [weak self] in self?.onRecordingEnded?() }
-            return nil
+            return true
+        case .cancel:
+            // Too short to transcribe — still stop capture so the mic is released
+            DispatchQueue.main.async { [weak self] in self?.onRecordingCancelled?() }
+            return true
+        case .suppress:
+            return true
+        case .passThrough:
+            return false
         }
-
-        return Unmanaged.passUnretained(event)
     }
 }
 

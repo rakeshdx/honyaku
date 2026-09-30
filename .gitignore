@@ -26,3 +26,6 @@ Dependencies/
 build/
 *.o
 *.d
+
+# Local Debug signing (team ID)
+Config/Local.xcconfig
