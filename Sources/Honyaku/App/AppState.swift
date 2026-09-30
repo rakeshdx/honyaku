@@ -31,6 +31,18 @@ final class AppState {
         didSet { UserDefaults.standard.set(selectedCleanupModelID, forKey: "selectedCleanupModelID") }
     }
 
+    /// Cleanup system prompt. Resetting to the default removes the stored copy, so future default
+    /// improvements reach the user.
+    var cleanupPrompt: String = UserDefaults.standard.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt {
+        didSet {
+            if cleanupPrompt == CleanupService.defaultPrompt {
+                UserDefaults.standard.removeObject(forKey: "cleanupPrompt")
+            } else {
+                UserDefaults.standard.set(cleanupPrompt, forKey: "cleanupPrompt")
+            }
+        }
+    }
+
     // Setup state
     var setupComplete: Bool = UserDefaults.standard.bool(forKey: "setupComplete") {
         didSet { UserDefaults.standard.set(setupComplete, forKey: "setupComplete") }
@@ -52,6 +64,15 @@ final class AppState {
     /// Selections migrated from a retired model this launch, so the pipeline can fetch the new models
     /// straight away. A static because property initialisers can't reach the instance.
     nonisolated(unsafe) static var migratedSelectionKeys: Set<String> = []
+
+    // Live recording feedback for the keycap and capsule
+    /// 0–1 input level while recording, updated at most ~30 times a second.
+    var inputLevel: Double = 0
+    var recordingStartedAt: Date?
+
+    // First run's "Try it" step: the dictation result is shown in the window instead of pasted
+    var firstRunTestActive = false
+    var firstRunTestTranscript: String?
 
     func setError(_ message: String) {
         status = .error(message)

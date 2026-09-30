@@ -9,9 +9,18 @@ final class TranscriptStore: ObservableObject {
         return appSupport.appendingPathComponent("Honyaku/history.json")
     }()
 
+    private let persistsToDisk: Bool
+
     init() {
+        persistsToDisk = true
         prepareDirectory()
         load()
+    }
+
+    /// A store that never reads or writes history.json — for tests and design renders.
+    init(inMemory entries: [TranscriptEntry]) {
+        persistsToDisk = false
+        self.entries = entries
     }
 
     func save(_ entry: TranscriptEntry) {
@@ -19,8 +28,21 @@ final class TranscriptStore: ObservableObject {
         persist()
     }
 
+    func delete(_ id: TranscriptEntry.ID) {
+        entries.removeAll { $0.id == id }
+        persist()
+    }
+
+    /// Entries whose cleaned text contains `query`, case- and diacritic-insensitively; all entries for a blank query.
+    static func filter(_ entries: [TranscriptEntry], matching query: String) -> [TranscriptEntry] {
+        let trimmed = query.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return entries }
+        return entries.filter { $0.cleanedText.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+    }
+
     func clearAll() {
         entries.removeAll()
+        guard persistsToDisk else { return }
         try? FileManager.default.removeItem(at: fileURL)
     }
 
@@ -45,7 +67,7 @@ final class TranscriptStore: ObservableObject {
     }
 
     private func persist() {
-        guard let data = try? JSONEncoder().encode(entries) else { return }
+        guard persistsToDisk, let data = try? JSONEncoder().encode(entries) else { return }
         do {
             try data.write(to: fileURL, options: .atomic)
             // Enforce permissions 600 (owner rw, no group/other access)

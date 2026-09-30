@@ -17,6 +17,9 @@ final class TranscriptionPipeline {
         self.transcriptStore = transcriptStore
         downloads = ModelDownloads(appState: appState)
         audioCapture.prepare()
+        audioCapture.onLevel = { [weak appState] level in
+            MainActor.assumeIsolated { appState?.inputLevel = level }
+        }
         audioCapture.onDeviceDisconnected = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -62,6 +65,8 @@ final class TranscriptionPipeline {
         appState.clearError()
         do {
             try audioCapture.startCapture()
+            appState.inputLevel = 0
+            appState.recordingStartedAt = Date()
             appState.status = .recording
         } catch {
             appState.setError("Could not start microphone: \(error.localizedDescription)")
@@ -71,6 +76,7 @@ final class TranscriptionPipeline {
     func stopRecordingAndProcess() {
         guard appState.status == .recording else { return }
         appState.status = .transcribing
+        appState.inputLevel = 0
 
         Task {
             do {
@@ -92,6 +98,7 @@ final class TranscriptionPipeline {
         // Only an active recording is cancelled — never overwrite an error or an in-flight pipeline run
         guard appState.status == .recording else { return }
         audioCapture.cancelCapture()
+        appState.inputLevel = 0
         appState.status = .idle
     }
 
@@ -168,6 +175,12 @@ final class TranscriptionPipeline {
         if englishFillers { finalText = CleanupService.removeUnambiguousFillers(finalText) }
         guard !finalText.isEmpty else {
             appState.status = .idle
+            return
+        }
+
+        // First run's "Try it" step shows the result in the window: no paste, no history
+        if appState.firstRunTestActive {
+            appState.firstRunTestTranscript = finalText
             return
         }
 

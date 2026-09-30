@@ -9,6 +9,7 @@ struct HonyakuApp: App {
     @State private var appState = AppState()
 
     private let hotkeyService = HotkeyService()
+    @State private var capsule: RecordingCapsuleController?
     private let singleInstanceService = SingleInstanceService()
     // Pipeline is created once setup is complete; nil until then.
     @State private var pipeline: TranscriptionPipeline?
@@ -26,36 +27,38 @@ struct HonyakuApp: App {
                 }
         } label: {
             // The label renders at launch (the popover only on click), so push-to-talk works without opening it
-            Image(systemName: menuBarIcon)
-                .task { startPipelineIfReady() }
+            MenuBarLabel(
+                icon: menuBarIcon,
+                onLaunch: {
+                    startPipelineIfReady()
+                    if capsule == nil, !Self.isHostingTests { capsule = RecordingCapsuleController(appState: appState) }
+                },
+                onSetupComplete: { startPipelineIfReady() },
+                onStatusChange: { capsule?.update(for: $0) }
+            )
+            .environment(appState)
+            .environmentObject(permissionManager)
         }
         .menuBarExtraStyle(.window)
 
-        WindowGroup("Settings", id: "settings") {
+        Settings {
             SettingsView()
                 .environment(appState)
                 .environmentObject(transcriptStore)
                 .environmentObject(permissionManager)
         }
-        .windowResizability(.contentSize)
-        .defaultSize(width: 600, height: 480)
 
-        WindowGroup("Welcome to Honyaku", id: "onboarding") {
-            OnboardingBridge()
-                .environmentObject(permissionManager)
-        }
-        .windowResizability(.contentSize)
-        .defaultSize(width: 440, height: 400)
-
-        WindowGroup("Set Up Honyaku", id: "setup") {
-            SetupWizardView()
+        Window(FirstRunView.windowTitle, id: FirstRunView.windowID) {
+            FirstRunView()
                 .environment(appState)
                 .environmentObject(permissionManager)
                 .environmentObject(transcriptStore)
         }
         .windowResizability(.contentSize)
-        .defaultSize(width: 480, height: 520)
+        .defaultPosition(.center)
     }
+
+    static var isHostingTests: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
 
     private var menuBarIcon: String {
         switch appState.status {
@@ -103,7 +106,7 @@ struct HonyakuApp: App {
     private func startPipelineIfReady() {
         guard appState.setupComplete else { return }
         // Unit tests are hosted in the app; a test run must not add a second Control listener or load models
-        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
+        guard !Self.isHostingTests else { return }
 
         // Create the pipeline once
         if pipeline == nil {
@@ -158,5 +161,32 @@ struct HonyakuApp: App {
         NSPasteboard.general.clearContents()
         // Temp files cleaned at launch; also clean on quit for extra safety
         TranscriptionService.cleanupOrphanedTempFiles()
+    }
+}
+
+/// The menu bar icon. It exists from launch, so it drives launch-time work: starting the pipeline,
+/// opening first run when it's needed, and showing the recording capsule as the status changes.
+private struct MenuBarLabel: View {
+    let icon: String
+    let onLaunch: () -> Void
+    let onSetupComplete: () -> Void
+    let onStatusChange: (AppStatus) -> Void
+
+    @Environment(AppState.self) private var appState
+    @EnvironmentObject private var permissionManager: PermissionManager
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Image(systemName: icon)
+            .task {
+                onLaunch()
+                permissionManager.checkAll()
+                if !HonyakuApp.isHostingTests, FirstRunView.isNeeded(appState: appState, permissions: permissionManager) {
+                    openWindow(id: FirstRunView.windowID)
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                }
+            }
+            .onChange(of: appState.setupComplete) { _, done in if done { onSetupComplete() } }
+            .onChange(of: appState.status) { _, status in onStatusChange(status) }
     }
 }

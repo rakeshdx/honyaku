@@ -22,7 +22,7 @@ final class MenuBarUITests: XCTestCase {
             throw XCTSkip("Menu bar button not found — ensure app launched with menu bar mode")
         }
         menuBarButton.click()
-        let settingsButton = app.buttons["Settings"].firstMatch
+        let settingsButton = app.buttons["Settings…"].firstMatch
         XCTAssertTrue(settingsButton.waitForExistence(timeout: 2), "Settings button should appear after clicking menu bar icon")
     }
 
@@ -31,12 +31,13 @@ final class MenuBarUITests: XCTestCase {
         guard menuBarButton.exists else { throw XCTSkip("Menu bar button not found") }
         menuBarButton.click()
 
-        let settingsButton = app.buttons["Settings"].firstMatch
+        let settingsButton = app.buttons["Settings…"].firstMatch
         guard settingsButton.waitForExistence(timeout: 2) else { throw XCTSkip("Popover did not open") }
         settingsButton.click()
 
-        let doneButton = app.buttons["Done"].firstMatch
-        XCTAssertTrue(doneButton.waitForExistence(timeout: 3), "Settings Done button should appear")
+        // The native Settings window opens on its General tab (or the last tab used)
+        let generalTab = app.toolbars.buttons["General"].firstMatch
+        XCTAssertTrue(generalTab.waitForExistence(timeout: 3), "Settings window with its General tab should appear")
     }
 
     func testClearHistoryConfirmationDialog() throws {
@@ -44,7 +45,7 @@ final class MenuBarUITests: XCTestCase {
         guard menuBarButton.exists else { throw XCTSkip("Menu bar button not found") }
         menuBarButton.click()
 
-        let settingsButton = app.buttons["Settings"].firstMatch
+        let settingsButton = app.buttons["Settings…"].firstMatch
         guard settingsButton.waitForExistence(timeout: 2) else { throw XCTSkip("Popover not open") }
         settingsButton.click()
 

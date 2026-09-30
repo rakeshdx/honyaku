@@ -1,301 +1,70 @@
 import SwiftUI
 import ServiceManagement
 
+/// The native Settings window (⌘,), in five tabs.
 struct SettingsView: View {
-    @Environment(AppState.self) private var appState
-    @EnvironmentObject private var transcriptStore: TranscriptStore
-    @EnvironmentObject private var permissionManager: PermissionManager
-    @Environment(\.dismiss) private var dismiss
+    enum Tab: String { case general, models, dictation, history, privacy }
 
-    @AppStorage("cleanupEnabled") private var cleanupEnabled = true
-    @AppStorage("diarizationEnabled") private var diarizationEnabled = false
-    @AppStorage("cleanupPrompt") private var cleanupPrompt = CleanupService.defaultPrompt
-    @AppStorage("selectedSpeechModelID") private var selectedSpeechModelID = ModelRegistry.defaultSpeechModelID
-    // Empty string means Auto-detect
-    @AppStorage(TranscriptionService.dictationLanguageKey) private var dictationLanguage = ""
-    @AppStorage("selectedCleanupModelID") private var selectedCleanupModelID = ModelRegistry.defaultCleanupModelID
-
-    @State private var selectedSection: String = "models"
-    @State private var showClearHistoryAlert = false
-    @State private var showHFToken = false
-    @State private var hfTokenInput = ""
-    @State private var hfTokenSaved = false
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @AppStorage("settingsTab") private var tab: Tab = .general
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selectedSection) {
-                Label("Models", systemImage: "cpu").tag("models")
-                Label("Audio", systemImage: "mic").tag("audio")
-                Label("Cleanup", systemImage: "wand.and.stars").tag("cleanup")
-                Label("Diarization", systemImage: "person.2").tag("diarization")
-                Label("History", systemImage: "clock").tag("history")
-                Label("Privacy", systemImage: "lock.shield").tag("privacy")
-                Label("General", systemImage: "gearshape").tag("general")
-            }
-            .listStyle(.sidebar)
-            .frame(minWidth: 140)
-        } detail: {
-            Group {
-                switch selectedSection {
-                case "audio":       audioSection
-                case "cleanup":     cleanupSection
-                case "diarization": diarizationSection
-                case "history":     historySection
-                case "privacy":     privacySection
-                case "general":     generalSection
-                default:            modelsSection
-                }
-            }
+        TabView(selection: $tab) {
+            GeneralSettings()
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(Tab.general)
+            ModelsSettings()
+                .tabItem { Label("Models", systemImage: "square.stack.3d.up") }
+                .tag(Tab.models)
+            DictationSettings()
+                .tabItem { Label("Dictation", systemImage: "text.bubble") }
+                .tag(Tab.dictation)
+            HistorySettings()
+                .tabItem { Label("History", systemImage: "clock") }
+                .tag(Tab.history)
+            PrivacySettings()
+                .tabItem { Label("Privacy", systemImage: "lock") }
+                .tag(Tab.privacy)
         }
-        .frame(width: 560, height: 420)
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Done") { dismiss() }
-            }
-        }
+        .tint(Theme.ai)
     }
+}
 
-    // MARK: - Models
+// MARK: - General
 
-    private var modelsSection: some View {
+struct GeneralSettings: View {
+    @EnvironmentObject private var permissionManager: PermissionManager
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @AppStorage("selectedMicrophoneID") private var microphoneID = ""
+
+    var body: some View {
         Form {
-            Section("Speech Model") {
-                ForEach(ModelRegistry.speechModels) { model in
-                    ModelSettingsRow(model: model, selectedID: $selectedSpeechModelID)
-                }
-                let multilingual = ModelRegistry.model(id: selectedSpeechModelID)?.supportsDictationLanguage ?? false
-                Picker("Language", selection: $dictationLanguage) {
-                    Text("Auto-detect").tag("")
-                    ForEach(TranscriptionService.dictationLanguages, id: \.code) { language in
-                        Text(language.name).tag(language.code)
+            Section {
+                HStack(spacing: 12) {
+                    KeycapView(state: .idle)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hold Control to talk")
+                        Text("Let go to paste the text where you're typing. A tap on its own does nothing.")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .disabled(!multilingual)
-                Text(multilingual
-                     ? "Choose the language you speak if short phrases come out in the wrong language."
-                     : "Only the multilingual model uses this. The selected model transcribes English.")
-                    .font(.caption).foregroundStyle(.secondary)
+                .padding(.vertical, 2)
             }
-            Section("Cleanup Model") {
-                ForEach(ModelRegistry.cleanupModels) { model in
-                    ModelSettingsRow(model: model, selectedID: $selectedCleanupModelID)
-                }
-            }
-            Section("Diarization Model") {
-                ForEach(ModelRegistry.diarizationModels) { model in
-                    ModelSettingsRow(model: model, selectedID: .constant(ModelRegistry.defaultDiarizationModelID))
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    // MARK: - Audio
-
-    private var audioSection: some View {
-        Form {
-            Section("Microphone") {
-                Picker("Input Device", selection: Binding(
-                    get: { UserDefaults.standard.string(forKey: "selectedMicrophoneID") ?? "" },
-                    set: { UserDefaults.standard.set($0, forKey: "selectedMicrophoneID") }
-                )) {
-                    Text("System Default").tag("")
+            Section {
+                Toggle("Open Honyaku when you log in", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, enabled in
+                        do {
+                            if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+                        } catch {
+                            launchAtLogin = !enabled  // revert on failure
+                        }
+                    }
+                Picker("Microphone", selection: $microphoneID) {
+                    Text("System default").tag("")
                     ForEach(AudioCaptureService.availableInputDevices(), id: \.uniqueID) { device in
                         Text(device.localizedName).tag(device.uniqueID)
                     }
                 }
-            }
-            if !permissionManager.microphoneGranted {
-                Section {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
-                        Text("Microphone permission not granted.")
-                        Button("Open Settings") { permissionManager.openMicrophoneSettings() }
-                            .buttonStyle(.link)
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    // MARK: - Cleanup
-
-    private var cleanupSection: some View {
-        Form {
-            Section {
-                Toggle("Enable LLM Cleanup", isOn: $cleanupEnabled)
-            }
-            Section("System Prompt") {
-                TextEditor(text: $cleanupPrompt)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(minHeight: 120)
-                HStack {
-                    Spacer()
-                    Button("Reset to Default") {
-                        cleanupPrompt = CleanupService.defaultPrompt
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    // MARK: - Diarization
-
-    private var diarizationSection: some View {
-        Form {
-            Section {
-                Toggle("Enable Speaker Diarization", isOn: $diarizationEnabled)
-                    .onChange(of: diarizationEnabled) { _, enabled in
-                        if enabled {
-                            // Trigger model download if needed
-                            appState.diarizationEnabled = enabled
-                        }
-                    }
-            }
-            Section("Model") {
-                let model = ModelRegistry.diarizationModels[0]
-                HStack {
-                    Text(model.displayName)
-                    Spacer()
-                    if ModelStore.shared.isDownloaded(model) {
-                        Label("Downloaded", systemImage: "checkmark.circle.fill")
-                            .foregroundStyle(.green)
-                            .font(.caption)
-                    } else {
-                        Text("\(model.sizeMB) MB")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    // MARK: - History
-
-    private var historySection: some View {
-        VStack(spacing: 0) {
-            List(transcriptStore.entries) { entry in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.cleanedText).lineLimit(2)
-                    HStack {
-                        Text(entry.timestamp, style: .date)
-                        Text(entry.timestamp, style: .time)
-                    }
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-                }
-                .contextMenu {
-                    Button("Copy") {
-                        NSPasteboard.general.clearContents()
-                        NSPasteboard.general.setString(entry.cleanedText, forType: .string)
-                    }
-                }
-            }
-
-            Divider()
-            HStack {
-                Spacer()
-                Button("Clear All History") { showClearHistoryAlert = true }
-                    .buttonStyle(.bordered)
-                    .foregroundStyle(.red)
-                    .disabled(transcriptStore.entries.isEmpty)
-            }
-            .padding(12)
-        }
-        .alert("Clear History?", isPresented: $showClearHistoryAlert) {
-            Button("Clear", role: .destructive) { transcriptStore.clearAll() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will permanently delete all transcript history.")
-        }
-    }
-
-    // MARK: - Privacy
-
-    private var privacySection: some View {
-        Form {
-            Section("Hugging Face Access Token") {
-                Text("Required for downloading certain diarization models. Stored securely in your Keychain — never used at runtime.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                HStack {
-                    if showHFToken {
-                        TextField("hf_...", text: $hfTokenInput)
-                            .textFieldStyle(.roundedBorder)
-                    } else {
-                        SecureField("hf_...", text: $hfTokenInput)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                    Button(showHFToken ? "Hide" : "Show") { showHFToken.toggle() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                }
-
-                HStack {
-                    Button("Save Token") {
-                        try? KeychainService.save(key: KeychainService.hfTokenKey, value: hfTokenInput)
-                        hfTokenSaved = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { hfTokenSaved = false }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(hfTokenInput.isEmpty)
-
-                    if hfTokenSaved { Label("Saved", systemImage: "checkmark").foregroundStyle(.green) }
-
-                    Spacer()
-
-                    Button("Remove Token") {
-                        KeychainService.delete(key: KeychainService.hfTokenKey)
-                        hfTokenInput = ""
-                    }
-                    .buttonStyle(.bordered)
-                    .foregroundStyle(.red)
-                }
-            }
-
-            Section("Data Practices") {
-                Label("All speech processing happens on your Mac", systemImage: "lock.fill")
-                Label("No audio or transcripts are sent to the cloud", systemImage: "icloud.slash")
-                Label("Models are downloaded once and used offline", systemImage: "wifi.slash")
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-        .onAppear {
-            hfTokenInput = KeychainService.load(key: KeychainService.hfTokenKey) ?? ""
-        }
-    }
-
-    // MARK: - General
-
-    private var generalSection: some View {
-        Form {
-            Section {
-                Toggle("Launch at Login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enabled in
-                        do {
-                            if enabled {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
-                            }
-                        } catch {
-                            // Revert toggle on failure
-                            launchAtLogin = !enabled
-                        }
-                    }
             }
             Section("Permissions") {
                 PermissionStatusRow(title: "Microphone", granted: permissionManager.microphoneGranted,
@@ -305,59 +74,8 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .padding()
-    }
-}
-
-// MARK: - Helpers
-
-struct ModelSettingsRow: View {
-    let model: ModelInfo
-    @Binding var selectedID: String
-    @State private var isDownloading = false
-    @State private var progress: Double = 0
-
-    private var isDownloaded: Bool { ModelStore.shared.isDownloaded(model) }
-    private var isSelected: Bool { selectedID == model.id }
-
-    var body: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.displayName)
-                Text("\(model.sizeMB) MB · \(model.notes)")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Spacer()
-            if isDownloading {
-                ProgressView(value: progress).frame(width: 80)
-            } else if isDownloaded {
-                if isSelected {
-                    Label("Active", systemImage: "checkmark.circle.fill").foregroundStyle(.blue).font(.caption)
-                } else {
-                    Button("Use") { selectedID = model.id }.buttonStyle(.bordered).controlSize(.small)
-                }
-            } else {
-                Button("Download (\(model.sizeMB) MB)") { downloadModel() }
-                    .buttonStyle(.bordered).controlSize(.small)
-            }
-        }
-    }
-
-    private func downloadModel() {
-        isDownloading = true
-        Task {
-            do {
-                try await ModelInstaller.shared.install(model) { p in
-                    Task { @MainActor in progress = p }
-                }
-                await MainActor.run {
-                    selectedID = model.id
-                    isDownloading = false
-                }
-            } catch {
-                await MainActor.run { isDownloading = false }
-            }
-        }
+        .frame(width: 500, height: 360)
+        .onAppear { permissionManager.checkAll() }
     }
 }
 
@@ -367,14 +85,369 @@ struct PermissionStatusRow: View {
     let action: () -> Void
 
     var body: some View {
-        HStack {
-            Text(title)
-            Spacer()
+        LabeledContent(title) {
             if granted {
-                Label("Granted", systemImage: "checkmark.circle.fill").foregroundStyle(.green).font(.caption)
+                Label("Allowed", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.ai)
             } else {
-                Button("Open Settings") { action() }.buttonStyle(.link).font(.caption)
+                Button("Open System Settings", action: action)
             }
         }
+    }
+}
+
+// MARK: - Models
+
+struct ModelsSettings: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        @Bindable var appState = appState
+        Form {
+            Section {
+                ForEach(ModelRegistry.speechModels) { model in
+                    ModelSettingsRow(model: model, selectedID: $appState.selectedSpeechModelID)
+                }
+            } header: {
+                Text("Speech")
+            } footer: {
+                Text("Turns your voice into text.").foregroundStyle(.secondary)
+            }
+            Section {
+                ForEach(ModelRegistry.cleanupModels) { model in
+                    ModelSettingsRow(model: model, selectedID: $appState.selectedCleanupModelID)
+                }
+            } header: {
+                Text("Cleanup")
+            } footer: {
+                Text("Removes filler words and adds punctuation, without changing what you said.").foregroundStyle(.secondary)
+            }
+            OlderModelsSection()
+        }
+        .formStyle(.grouped)
+        .frame(width: 500, height: 520)
+    }
+}
+
+struct ModelSettingsRow: View {
+    let model: ModelInfo
+    @Binding var selectedID: String
+    @State private var isDownloading = false
+    @State private var progress: Double = 0
+    @State private var failure: String?
+    @State private var refresh = 0  // re-evaluates disk state after download or delete
+
+    private var state: InstallState { _ = refresh; return ModelInstaller.state(of: model) }
+    private var isSelected: Bool { selectedID == model.id }
+
+    var body: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.displayName)
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(failure == nil ? AnyShapeStyle(.secondary) : AnyShapeStyle(.orange))
+                    .monospacedDigit()
+            }
+            Spacer()
+            if isDownloading {
+                ProgressView(value: progress).frame(width: 90)
+            } else {
+                switch state {
+                case .installed:
+                    if isSelected {
+                        Text("In use").font(.callout).foregroundStyle(Theme.ai)
+                    } else {
+                        Button("Delete", role: .destructive, action: delete)
+                        Button("Use") { selectedID = model.id }
+                    }
+                case .incomplete:
+                    Button("Resume download", action: download)
+                case .notInstalled:
+                    Button("Download", action: download)
+                }
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var detail: String {
+        if let failure { return failure }
+        if isDownloading { return "Downloading, \(Int(progress * Double(model.sizeMB))) of \(model.sizeMB) MB" }
+        if case .installed(let bytes) = state {
+            return "\(ModelCopy.summary(for: model)), \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) on disk"
+        }
+        return "\(ModelCopy.summary(for: model)), \(ModelCopy.size(mb: model.sizeMB))"
+    }
+
+    private func download() {
+        failure = nil
+        isDownloading = true
+        Task {
+            do {
+                try await ModelInstaller.shared.install(model) { p in
+                    Task { @MainActor in progress = p }
+                }
+                selectedID = model.id
+            } catch {
+                failure = "Download didn't finish. Check your connection and try again."
+            }
+            isDownloading = false
+            refresh += 1
+        }
+    }
+
+    private func delete() {
+        Task {
+            do { try await ModelInstaller.shared.delete(model) } catch { failure = "Couldn't delete the model files." }
+            refresh += 1
+        }
+    }
+}
+
+/// Files from models earlier versions of Honyaku offered, which the registry no longer lists.
+/// Removed to the Trash rather than deleted outright, so a mistake can be undone.
+struct OlderModelsSection: View {
+    @State private var models = RetiredModelFiles.onDisk()
+
+    var body: some View {
+        if !models.isEmpty {
+            Section {
+                ForEach(models, id: \.url) { model in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(model.name)
+                            Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file) + " on disk")
+                                .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                        }
+                        Spacer()
+                        Button("Move to Trash", role: .destructive) {
+                            try? FileManager.default.trashItem(at: model.url, resultingItemURL: nil)
+                            models = RetiredModelFiles.onDisk()
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            } header: {
+                Text("Older models")
+            } footer: {
+                Text("Earlier versions of Honyaku used these. They're no longer needed.").foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+enum RetiredModelFiles {
+    struct Item { let name: String; let url: URL; let bytes: Int64 }
+
+    /// Known folders only (never a scan), so nothing but retired model files can be listed.
+    static func onDisk(fileManager: FileManager = .default) -> [Item] {
+        let cleanup = ModelStore.shared.baseDirectory.appending(path: "cleanup")
+        let whisper = TranscriptionService.localModelFolder(repo: "argmaxinc/whisperkit-coreml", variant: "")
+        let candidates: [(String, URL)] = [
+            ("Qwen 2.5 1.5B", cleanup.appending(path: "qwen-1.5b-mlx")),
+            ("Qwen 2.5 3B", cleanup.appending(path: "qwen-3b-mlx")),
+            ("Qwen 2.5 7B", cleanup.appending(path: "qwen-7b-mlx")),
+            ("Qwen 0.8B", cleanup.appending(path: "qwen-0.8b")),
+            ("Qwen 4B", cleanup.appending(path: "qwen-4b")),
+            ("Qwen 7B", cleanup.appending(path: "qwen-7b")),
+            ("Whisper Tiny (English)", whisper.appending(path: "openai_whisper-tiny.en")),
+            ("Whisper Small (English)", whisper.appending(path: "openai_whisper-small.en")),
+            ("Whisper Small (Multilingual)", whisper.appending(path: "openai_whisper-small")),
+        ]
+        return candidates.compactMap { name, url in
+            guard fileManager.fileExists(atPath: url.path) else { return nil }
+            return Item(name: name, url: url, bytes: ModelInstaller.sizeOnDisk(url))
+        }
+    }
+}
+
+// MARK: - Dictation
+
+struct DictationSettings: View {
+    @Environment(AppState.self) private var appState
+    @State private var showPrompt = false
+    // Read by the speech engine per dictation; empty means Auto-detect
+    @AppStorage(TranscriptionService.dictationLanguageKey) private var dictationLanguage = ""
+
+    var body: some View {
+        @Bindable var appState = appState
+        Form {
+            Section {
+                Toggle(isOn: $appState.cleanupEnabled) {
+                    Text("Clean up the text")
+                    Text("Removes filler words like \"um\" and adds punctuation. Your words are never changed or reordered.")
+                }
+                Toggle(isOn: $appState.diarizationEnabled) {
+                    Text("Label speakers")
+                    Text("Adds [Speaker 1], [Speaker 2] when more than one person talks. Downloads a 10 MB model on first use.")
+                }
+            }
+            Section {
+                let multilingual = ModelRegistry.model(id: appState.selectedSpeechModelID)?.supportsDictationLanguage ?? false
+                Picker(selection: $dictationLanguage) {
+                    Text("Auto-detect").tag("")
+                    ForEach(TranscriptionService.dictationLanguages, id: \.code) { language in
+                        Text(language.name).tag(language.code)
+                    }
+                } label: {
+                    Text("Language")
+                    Text(multilingual
+                         ? "Choose the language you speak if short phrases come out in the wrong language."
+                         : "Only the multilingual speech model uses this. The selected model transcribes English.")
+                }
+                .disabled(!multilingual)
+            }
+            Section {
+                DisclosureGroup("Advanced", isExpanded: $showPrompt) {
+                    Text("The instructions the cleanup model follows.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $appState.cleanupPrompt)
+                        .font(.system(.callout))
+                        .frame(minHeight: 150)
+                    HStack {
+                        Spacer()
+                        Button("Reset to default") { appState.cleanupPrompt = CleanupService.defaultPrompt }
+                            .disabled(appState.cleanupPrompt == CleanupService.defaultPrompt)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 500, height: showPrompt ? 540 : 340)
+    }
+}
+
+// MARK: - History
+
+struct HistorySettings: View {
+    @EnvironmentObject private var transcriptStore: TranscriptStore
+    @State private var query = ""
+    @State private var confirmDeleteAll = false
+
+    private var results: [TranscriptEntry] { TranscriptStore.filter(transcriptStore.entries, matching: query) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            TextField("Search history", text: $query)
+                .textFieldStyle(.roundedBorder)
+                .padding(12)
+            Divider()
+            Group {
+                if transcriptStore.entries.isEmpty {
+                    placeholder("No dictations yet. Hold Control and speak to add one.")
+                } else if results.isEmpty {
+                    placeholder("Nothing matches \u{201C}\(query)\u{201D}.")
+                } else {
+                    List(results) { entry in
+                        HistoryRow(entry: entry) { transcriptStore.delete(entry.id) }
+                    }
+                    .listStyle(.inset)
+                }
+            }
+            .frame(maxHeight: .infinity)
+            Divider()
+            HStack {
+                Text("\(transcriptStore.entries.count) dictation\(transcriptStore.entries.count == 1 ? "" : "s"), stored only on this Mac")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Delete all history…", role: .destructive) { confirmDeleteAll = true }
+                    .disabled(transcriptStore.entries.isEmpty)
+            }
+            .padding(12)
+        }
+        .frame(width: 500, height: 440)
+        .confirmationDialog("Delete all history?", isPresented: $confirmDeleteAll) {
+            Button("Delete all history", role: .destructive) { transcriptStore.clearAll() }
+        } message: {
+            Text("All \(transcriptStore.entries.count) dictations are removed from this Mac. This can't be undone.")
+        }
+    }
+
+    private func placeholder(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding()
+    }
+}
+
+private struct HistoryRow: View {
+    let entry: TranscriptEntry
+    let onDelete: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(entry.cleanedText)
+                .font(Theme.transcript)
+                .lineSpacing(Theme.transcriptLineSpacing)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(entry.timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 4)
+        .contextMenu {
+            Button("Copy") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(entry.cleanedText, forType: .string)
+            }
+            Button("Delete", role: .destructive, action: onDelete)
+        }
+    }
+}
+
+// MARK: - Privacy
+
+struct PrivacySettings: View {
+    @State private var showAdvanced = false
+    @State private var revealToken = false
+    @State private var tokenInput = ""
+    @State private var tokenSaved = false
+
+    var body: some View {
+        Form {
+            Section("What stays on your Mac") {
+                Label("Speech is turned into text on this Mac", systemImage: "cpu")
+                Label("Audio is deleted as soon as it's transcribed", systemImage: "waveform.slash")
+                Label("Transcripts are never sent anywhere", systemImage: "icloud.slash")
+                Label("Models download once, then work offline", systemImage: "wifi.slash")
+            }
+            Section {
+                DisclosureGroup("Advanced", isExpanded: $showAdvanced) {
+                    Text("A Hugging Face access token is only needed to download some speaker-labelling models. It's kept in your Keychain.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Group {
+                            if revealToken { TextField("hf_…", text: $tokenInput) } else { SecureField("hf_…", text: $tokenInput) }
+                        }
+                        .textFieldStyle(.roundedBorder)
+                        Button(revealToken ? "Hide" : "Show") { revealToken.toggle() }
+                    }
+                    HStack {
+                        Button("Save token") {
+                            try? KeychainService.save(key: KeychainService.hfTokenKey, value: tokenInput)
+                            tokenSaved = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { tokenSaved = false }
+                        }
+                        .disabled(tokenInput.isEmpty)
+                        if tokenSaved { Text("Saved").foregroundStyle(Theme.ai) }
+                        Spacer()
+                        Button("Remove token", role: .destructive) {
+                            KeychainService.delete(key: KeychainService.hfTokenKey)
+                            tokenInput = ""
+                        }
+                        .disabled(tokenInput.isEmpty)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .frame(width: 500, height: showAdvanced ? 440 : 300)
+        .onAppear { tokenInput = KeychainService.load(key: KeychainService.hfTokenKey) ?? "" }
     }
 }
