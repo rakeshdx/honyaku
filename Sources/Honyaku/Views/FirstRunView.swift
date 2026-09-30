@@ -14,19 +14,24 @@ struct FirstRunView: View {
         }
     }
 
-    static let windowTitle = "Set Up Honyaku"
+    static let windowTitle = "Set up Honyaku"
 
     /// First run is needed while a permission is missing or models haven't been set up.
     @MainActor
     static func isNeeded(appState: AppState, permissions: PermissionManager) -> Bool {
-        !permissions.microphoneGranted || !permissions.accessibilityGranted || !appState.setupComplete
+        isNeeded(setupComplete: appState.setupComplete, microphoneGranted: permissions.microphoneGranted,
+                 accessibilityGranted: permissions.accessibilityGranted)
     }
 
-    /// Resumes at the first incomplete step.
-    @MainActor
-    static func firstIncompleteStep(appState: AppState, microphoneGranted: Bool) -> Step {
-        if !microphoneGranted { return .permissions }
-        if !appState.setupComplete { return .models }
+    static func isNeeded(setupComplete: Bool, microphoneGranted: Bool, accessibilityGranted: Bool) -> Bool {
+        !microphoneGranted || !accessibilityGranted || !setupComplete
+    }
+
+    /// Resumes at the first incomplete step. A missing permission always comes first, even when models
+    /// were set up before (Accessibility can be turned off later).
+    static func firstIncompleteStep(setupComplete: Bool, microphoneGranted: Bool, accessibilityGranted: Bool) -> Step {
+        if !microphoneGranted || !accessibilityGranted { return .permissions }
+        if !setupComplete { return .models }
         return .tryIt
     }
 
@@ -64,13 +69,14 @@ struct FirstRunView: View {
             permissionManager.checkAll()
             guard !didPickInitialStep else { return }
             didPickInitialStep = true
-            step = Self.firstIncompleteStep(appState: appState, microphoneGranted: permissionManager.microphoneGranted)
+            step = Self.firstIncompleteStep(setupComplete: appState.setupComplete,
+                                            microphoneGranted: permissionManager.microphoneGranted,
+                                            accessibilityGranted: permissionManager.accessibilityGranted)
         }
     }
 
     private func finish() {
-        appState.firstRunTestActive = false
-        appState.firstRunTestTranscript = nil
+        appState.endFirstRunTest()
         NSApplication.shared.windows.first { $0.title == Self.windowTitle }?.close()
     }
 }
@@ -87,7 +93,7 @@ private struct StepHeader: View {
                 HStack(spacing: 7) {
                     ZStack {
                         Circle()
-                            .fill(step == current ? Theme.ai : .clear)
+                            .fill(step == current ? Theme.aiFill : .clear)
                             .overlay(Circle().strokeBorder(step.rawValue <= current.rawValue ? Theme.ai : Color.secondary.opacity(0.4)))
                         if step.rawValue < current.rawValue {
                             Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.ai)
@@ -121,7 +127,7 @@ private struct StepLayout<Content: View, Footer: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.title2.weight(.semibold))
+                Text(title).font(Theme.title)
                 Text(lede)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -165,7 +171,7 @@ private struct PermissionsStep: View {
                         ? "Turn Honyaku on in the list. If it's on but still not detected here, relaunch Honyaku."
                         : "Lets Honyaku notice the Control key anywhere and paste the text.",
                     granted: permissionManager.accessibilityGranted,
-                    actionTitle: "Open Settings",
+                    actionTitle: "Open System Settings",
                     action: {
                         accessibilityAttempted = true
                         permissionManager.requestAccessibility()
@@ -179,6 +185,7 @@ private struct PermissionsStep: View {
             Spacer()
             Button("Continue", action: onContinue)
                 .buttonStyle(.borderedProminent)
+                .tint(Theme.aiFill)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!permissionManager.microphoneGranted)
         }
@@ -307,6 +314,7 @@ private struct ModelsStep: View {
             Spacer()
             Button(downloading == nil ? "Download" : "Downloading…", action: download)
                 .buttonStyle(.borderedProminent)
+                .tint(Theme.aiFill)
                 .keyboardShortcut(.defaultAction)
                 .disabled(downloading != nil || speech == nil || cleanup == nil)
         }
@@ -390,6 +398,7 @@ private struct ModelChoiceList: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(model.id == selection ? .isSelected : [])
                     .background(model.id == selection ? Theme.ai.opacity(0.08) : .clear)
                     if model.id != models.last?.id { Divider().padding(.leading, 12) }
                 }
@@ -436,11 +445,13 @@ private struct TryItStep: View {
             } else {
                 Button("Start using Honyaku", action: onFinish)
                     .buttonStyle(.borderedProminent)
+                    .tint(Theme.aiFill)
                     .keyboardShortcut(.defaultAction)
             }
         }
-        .onAppear { appState.firstRunTestActive = true }
-        .onDisappear { appState.firstRunTestActive = false }
+        // A new test each time the step shows; closing the window also ends it (AppCoordinator)
+        .onAppear { appState.beginFirstRunTest() }
+        .onDisappear { appState.endFirstRunTest() }
     }
 
     private var isError: Bool {
@@ -469,8 +480,7 @@ enum ModelCopy {
         switch model.tier {
         case "recommended": return "Most accurate for English, and fastest"
         case "fast": return "Fastest"
-        case "balanced": return "Balanced speed and accuracy"
-        case "quality", "best": return "Most accurate, slower"
+        case "best": return "Most accurate, needs 16 GB of memory"
         case "multilingual": return "99 languages"
         default: return model.notes
         }

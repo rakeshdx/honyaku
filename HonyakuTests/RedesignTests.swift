@@ -93,6 +93,99 @@ final class StatusItemSymbolTests: XCTestCase {
         XCTAssertEqual(StatusItemController.symbol(for: .idle), "waveform")
         XCTAssertEqual(StatusItemController.symbol(for: .recording), "waveform.circle.fill")
         XCTAssertEqual(StatusItemController.symbol(for: .transcribing), "ellipsis.circle")
+        XCTAssertEqual(StatusItemController.symbol(for: .processing), "ellipsis.circle")
         XCTAssertEqual(StatusItemController.symbol(for: .error("x")), "exclamationmark.circle")
+    }
+
+    func testVoiceOverValueNamesTheState() {
+        XCTAssertEqual(StatusItemController.accessibilityValue(for: .idle), "Ready")
+        XCTAssertEqual(StatusItemController.accessibilityValue(for: .recording), "Recording")
+        XCTAssertEqual(StatusItemController.accessibilityValue(for: .transcribing), "Transcribing")
+        XCTAssertEqual(StatusItemController.accessibilityValue(for: .processing), "Cleaning up")
+        XCTAssertEqual(StatusItemController.accessibilityValue(for: .error("Mic unplugged.")), "Error: Mic unplugged.")
+    }
+}
+
+final class DictationDestinationTests: XCTestCase {
+    private func destination(_ recorded: Int?, _ current: Int?, front: Bool = false) -> DictationDestination {
+        TranscriptionPipeline.destination(recordedInTest: recorded, currentTest: current, honyakuIsFrontmost: front)
+    }
+
+    func testOrdinaryDictationPastes() {
+        XCTAssertEqual(destination(nil, nil), .paste)
+    }
+
+    func testTestDictationGoesToTheWindowWhileItsTestRuns() {
+        // Honyaku is always in front during Try it; that must not turn the result into "save only"
+        XCTAssertEqual(destination(3, 3, front: true), .firstRunTest)
+    }
+
+    func testTestDictationIsDiscardedOnceTheWindowCloses() {
+        XCTAssertEqual(destination(3, nil), .discard)
+        XCTAssertEqual(destination(3, nil, front: true), .discard)
+    }
+
+    func testTestDictationFromAnEarlierTestIsDiscarded() {
+        XCTAssertEqual(destination(3, 4, front: true), .discard)
+    }
+
+    func testDictationStartedBeforeTheTestStillPastes() {
+        // Recording began elsewhere, then Try it opened: not a test, so it isn't shown in the window
+        XCTAssertEqual(destination(nil, 4), .paste)
+    }
+
+    func testHonyakuInFrontSavesWithoutPasting() {
+        XCTAssertEqual(destination(nil, nil, front: true), .saveOnly)
+        XCTAssertEqual(destination(nil, 4, front: true), .saveOnly)
+    }
+}
+
+@MainActor
+final class FirstRunTestSessionTests: XCTestCase {
+    func testEachTestGetsANewSessionAndEndingClearsTheResult() {
+        let state = AppState()
+        state.beginFirstRunTest()
+        let first = state.firstRunTestSession
+        XCTAssertNotNil(first)
+        state.firstRunTestTranscript = "hello"
+        state.endFirstRunTest()
+        XCTAssertNil(state.firstRunTestSession)
+        XCTAssertNil(state.firstRunTestTranscript)
+        XCTAssertFalse(state.firstRunTestActive)
+        state.beginFirstRunTest()
+        XCTAssertNotEqual(state.firstRunTestSession, first)
+    }
+}
+
+final class FirstRunStepTests: XCTestCase {
+    func testMissingPermissionComesFirstEvenAfterSetup() {
+        XCTAssertEqual(FirstRunView.firstIncompleteStep(setupComplete: true, microphoneGranted: true, accessibilityGranted: false), .permissions)
+        XCTAssertEqual(FirstRunView.firstIncompleteStep(setupComplete: true, microphoneGranted: false, accessibilityGranted: true), .permissions)
+        XCTAssertEqual(FirstRunView.firstIncompleteStep(setupComplete: false, microphoneGranted: false, accessibilityGranted: false), .permissions)
+    }
+
+    func testModelsThenTryIt() {
+        XCTAssertEqual(FirstRunView.firstIncompleteStep(setupComplete: false, microphoneGranted: true, accessibilityGranted: true), .models)
+        XCTAssertEqual(FirstRunView.firstIncompleteStep(setupComplete: true, microphoneGranted: true, accessibilityGranted: true), .tryIt)
+    }
+
+    func testNeededUntilEverythingIsDone() {
+        XCTAssertFalse(FirstRunView.isNeeded(setupComplete: true, microphoneGranted: true, accessibilityGranted: true))
+        XCTAssertTrue(FirstRunView.isNeeded(setupComplete: false, microphoneGranted: true, accessibilityGranted: true))
+        XCTAssertTrue(FirstRunView.isNeeded(setupComplete: true, microphoneGranted: false, accessibilityGranted: true))
+        XCTAssertTrue(FirstRunView.isNeeded(setupComplete: true, microphoneGranted: true, accessibilityGranted: false))
+    }
+}
+
+final class ModelCopyTests: XCTestCase {
+    func testLargerCleanupModelSaysItNeeds16GB() throws {
+        let model = try XCTUnwrap(ModelRegistry.model(id: "qwen3-4b-2507"))
+        XCTAssertEqual(ModelCopy.summary(for: model), "Most accurate, needs 16 GB of memory")
+    }
+
+    func testEveryOfferedTierHasItsOwnCopy() {
+        // ModelCopy covers exactly the tiers the registry offers
+        let tiers = Set((ModelRegistry.speechModels + ModelRegistry.cleanupModels).map(\.tier))
+        XCTAssertEqual(tiers, ["recommended", "multilingual", "fast", "best"])
     }
 }

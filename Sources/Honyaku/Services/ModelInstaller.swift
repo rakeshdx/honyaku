@@ -18,8 +18,9 @@ actor ModelInstaller {
                                        _ progress: @escaping @Sendable (Double) -> Void) async throws -> Void
     private let installStep: InstallStep
     /// In-flight installs by model ID, so a second request waits for the first rather than racing it
-    /// (a forced Parakeet download deletes the folder another download is writing to).
-    private var installing: [String: Task<Void, Error>] = [:]
+    /// (a forced Parakeet download deletes the folder another download is writing to). Each caller's
+    /// progress handler is on the install's fan-out.
+    private var installing: [String: (task: Task<Void, Error>, progress: ProgressFanOut)] = [:]
 
     /// `installStep` is for tests; the default downloads, compiles and verifies the real model.
     init(installStep: InstallStep? = nil) {
@@ -64,16 +65,20 @@ actor ModelInstaller {
 
     /// Downloads a model and loads it once, so any Neural Engine compile happens now rather than on the
     /// first dictation. `progress` reports 0…1 on an arbitrary thread. A concurrent install of the same
-    /// model waits for the one already running (its progress goes to the first caller only).
+    /// model waits for the one already running, and its `progress` follows that install from then on.
     /// `force` re-downloads files that are present but won't load.
     func install(_ model: ModelInfo, force: Bool = false,
                  progress: @escaping @Sendable (Double) -> Void) async throws {
-        if let running = installing[model.id] { return try await running.value }
+        if let running = installing[model.id] {
+            running.progress.add(progress)
+            return try await running.task.value
+        }
         // Decided once, by the install that actually runs
         let force = force || ModelInstaller.state(of: model) == .incomplete
         let step = installStep
-        let task = Task { try await step(model, force, progress) }
-        installing[model.id] = task
+        let fanOut = ProgressFanOut(progress)
+        let task = Task { try await step(model, force) { fanOut.send($0) } }
+        installing[model.id] = (task, fanOut)
         defer { installing[model.id] = nil }
         try await task.value
     }
@@ -196,5 +201,33 @@ actor ModelInstaller {
                   let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else { return }
             total += Int64(size)
         }
+    }
+}
+
+/// Sends one install's progress to every caller waiting on it. Progress arrives on arbitrary threads.
+final class ProgressFanOut: @unchecked Sendable {
+    private let lock = NSLock()
+    private var handlers: [@Sendable (Double) -> Void]
+    private var latest: Double?
+
+    init(_ first: @escaping @Sendable (Double) -> Void) {
+        handlers = [first]
+    }
+
+    /// A late joiner hears the latest value straight away, so its bar doesn't start from zero.
+    func add(_ handler: @escaping @Sendable (Double) -> Void) {
+        let current = lock.withLock { () -> Double? in
+            handlers.append(handler)
+            return latest
+        }
+        if let current { handler(current) }
+    }
+
+    func send(_ fraction: Double) {
+        let targets = lock.withLock { () -> [@Sendable (Double) -> Void] in
+            latest = fraction
+            return handlers
+        }
+        for handler in targets { handler(fraction) }
     }
 }

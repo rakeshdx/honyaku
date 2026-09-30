@@ -47,7 +47,7 @@ final class ModelDownloads {
         running.remove(model.id)
         appState.modelDownloads[model.id] = nil
         if let error {
-            appState.setError("Couldn't download \(model.displayName): \(error.localizedDescription)")
+            appState.setError("Couldn't download \(model.displayName): \(error.localizedDescription) Check your connection; the download starts again with your next dictation, or from Settings > Models.")
         }
     }
 }

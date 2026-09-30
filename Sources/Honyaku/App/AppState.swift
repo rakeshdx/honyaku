@@ -70,9 +70,24 @@ final class AppState {
     var inputLevel: Double = 0
     var recordingStartedAt: Date?
 
-    // First run's "Try it" step: the dictation result is shown in the window instead of pasted
-    var firstRunTestActive = false
+    // First run's "Try it" step: the dictation result is shown in the window instead of pasted.
+    // Each test gets its own number, so a dictation started in a test that has since ended is discarded.
+    private(set) var firstRunTestSession: Int?
     var firstRunTestTranscript: String?
+    private var lastFirstRunTestSession = 0
+
+    var firstRunTestActive: Bool { firstRunTestSession != nil }
+
+    func beginFirstRunTest() {
+        lastFirstRunTestSession += 1
+        firstRunTestSession = lastFirstRunTestSession
+        firstRunTestTranscript = nil
+    }
+
+    func endFirstRunTest() {
+        firstRunTestSession = nil
+        firstRunTestTranscript = nil
+    }
 
     func setError(_ message: String) {
         status = .error(message)

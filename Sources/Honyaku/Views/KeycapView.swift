@@ -3,6 +3,7 @@ import SwiftUI
 /// The Control key, drawn as a physical keycap — Honyaku's one signature element.
 /// Idle: indigo glyph. Recording: pressed in, tinted live, with the input level rising inside the face.
 /// Busy: dimmed glyph (the surrounding text says "Transcribing…"). Error: orange edge.
+/// The glyph keeps at least 3:1 against the face in every state.
 struct KeycapView: View {
     enum KeyState: Equatable { case idle, recording, busy, error }
 
@@ -37,9 +38,10 @@ struct KeycapView: View {
         return ZStack(alignment: .bottom) {
             shape.fill(pressed ? Theme.live : Theme.keyFace)
             if pressed {
-                // Level fill rises from the bottom of the face as the user speaks
+                // Level fill rises from the bottom of the face as the user speaks; darker, not lighter,
+                // so the white glyph keeps its contrast over it
                 Rectangle()
-                    .fill(.white.opacity(0.28))
+                    .fill(.black.opacity(0.18))
                     .frame(height: (size - lip) * min(1, max(0, level)))
                     .animation(reduceMotion ? nil : .linear(duration: 0.08), value: level)
             }
@@ -65,7 +67,7 @@ struct KeycapView: View {
     private var glyphColor: Color {
         switch state {
         case .recording: return .white
-        case .busy: return Theme.ai.opacity(0.45)
+        case .busy: return Theme.keyGlyphBusy
         case .idle, .error: return Theme.ai
         }
     }

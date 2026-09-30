@@ -9,6 +9,10 @@ final class RecordingCapsuleController {
     private var panel: NSPanel?
     private var showTask: Task<Void, Never>?
     private var hideTask: Task<Void, Never>?
+    /// Bumped by every fade-out and every show, so a fade that was overtaken never hides the panel.
+    private var fadeGeneration = 0
+    /// The screen the capsule opened on; it re-centres there when its content changes width.
+    private var screen: NSScreen?
 
     /// A quick tap is over before this, so it never flashes the capsule.
     private let showDelay: Duration = .milliseconds(250)
@@ -22,7 +26,12 @@ final class RecordingCapsuleController {
         switch status {
         case .recording:
             hideTask?.cancel()
-            guard panel?.isVisible != true else { return }
+            if let panel, panel.isVisible {
+                // Possibly mid-fade from the last dictation: stop the fade and stay up
+                fadeGeneration += 1
+                reveal(panel, fromTransparent: false)
+                return
+            }
             showTask?.cancel()
             showTask = Task { [weak self] in
                 guard let self else { return }
@@ -46,12 +55,19 @@ final class RecordingCapsuleController {
     private func show() {
         let panel = self.panel ?? makePanel()
         self.panel = panel
+        fadeGeneration += 1
+        let mouse = NSEvent.mouseLocation
+        screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
         position(panel)
+        reveal(panel, fromTransparent: true)
+    }
+
+    private func reveal(_ panel: NSPanel, fromTransparent: Bool) {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             panel.alphaValue = 1
             panel.orderFrontRegardless()
         } else {
-            panel.alphaValue = 0
+            if fromTransparent { panel.alphaValue = 0 }
             panel.orderFrontRegardless()
             NSAnimationContext.runAnimationGroup { $0.duration = 0.15; panel.animator().alphaValue = 1 }
         }
@@ -62,11 +78,19 @@ final class RecordingCapsuleController {
         hideTask = Task { [weak self] in
             if delay > .zero { try? await Task.sleep(for: delay) }
             guard !Task.isCancelled, let self, let panel = self.panel, panel.isVisible else { return }
+            self.fadeGeneration += 1
+            let generation = self.fadeGeneration
             if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 panel.orderOut(nil)
             } else {
                 NSAnimationContext.runAnimationGroup({ $0.duration = 0.25; panel.animator().alphaValue = 0 },
-                                                     completionHandler: { panel.orderOut(nil) })
+                                                     completionHandler: { [weak self] in
+                    MainActor.assumeIsolated {
+                        // A recording that started during the fade has taken the panel back
+                        guard self?.fadeGeneration == generation else { return }
+                        panel.orderOut(nil)
+                    }
+                })
             }
         }
     }
@@ -82,20 +106,39 @@ final class RecordingCapsuleController {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
-        let host = NSHostingView(rootView: RecordingCapsuleView().environment(appState))
+        // Kept out of screenshots and screen sharing, like the system's own overlays
+        panel.sharingType = .none
+        let host = CapsuleHostingView(rootView: AnyView(RecordingCapsuleView().environment(appState)))
         host.sizingOptions = [.intrinsicContentSize]
+        host.onSizeChange = { [weak self, weak panel] in
+            // After the layout pass that changed the size, not inside it
+            DispatchQueue.main.async {
+                guard let self, let panel, panel.isVisible else { return }
+                self.position(panel)
+            }
+        }
         panel.contentView = host
         return panel
     }
 
-    /// Bottom centre of the screen with the pointer, clear of the Dock.
+    /// Bottom centre of the screen the capsule opened on (the one with the pointer), clear of the Dock.
     private func position(_ panel: NSPanel) {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main
-        guard let visible = screen?.visibleFrame, let content = panel.contentView else { return }
+        guard let visible = (screen ?? NSScreen.main)?.visibleFrame, let content = panel.contentView else { return }
         let size = content.fittingSize
-        panel.setFrame(NSRect(x: visible.midX - size.width / 2, y: visible.minY + 80, width: size.width, height: size.height),
-                       display: true)
+        let frame = NSRect(x: (visible.midX - size.width / 2).rounded(), y: visible.minY + 80,
+                           width: size.width, height: size.height)
+        guard frame != panel.frame else { return }
+        panel.setFrame(frame, display: true)
+    }
+}
+
+/// Reports when the SwiftUI content's size changes, so the panel can re-centre.
+private final class CapsuleHostingView: NSHostingView<AnyView> {
+    var onSizeChange: (() -> Void)?
+
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
+        onSizeChange?()
     }
 }
 

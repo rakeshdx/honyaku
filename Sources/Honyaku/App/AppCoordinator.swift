@@ -29,10 +29,16 @@ final class AppCoordinator {
     private var capsule: RecordingCapsuleController?
     private var statusItem: StatusItemController?
     private lazy var settingsWindow = SettingsWindowController(coordinator: self)
-    private lazy var firstRunWindow = HostedWindow(title: FirstRunView.windowTitle, freshContentOnReopen: true) { [unowned self] in
+    private lazy var firstRunWindow = HostedWindow(
+        title: FirstRunView.windowTitle, freshContentOnReopen: true,
+        // However the window closes, a Try it test ends with it, so later dictations paste as usual
+        onClose: { [unowned self] in appState.endFirstRunTest() }
+    ) { [unowned self] in
         // A closed first run starts over at its first incomplete step when reopened
         AnyView(withSharedState(FirstRunView()))
     }
+    /// The last error `startPipelineIfReady` reported, so it clears only its own error once fixed.
+    private var listenerError: String?
 
     init() {
         // Register default values so UserDefaults.bool(forKey:) returns correct defaults
@@ -48,9 +54,25 @@ final class AppCoordinator {
 
     static var isHostingTests: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
 
+    /// UI tests launch with `-HonyakuUITestSetupComplete YES`: setup counts as done for this launch only, and
+    /// the app shows its menu bar icon and windows without the Control listener, capsule or models.
+    static var isUITesting: Bool {
+        #if DEBUG
+        UserDefaults.standard.bool(forKey: "HonyakuUITestSetupComplete")
+        #else
+        false
+        #endif
+    }
+
     // MARK: - Launch
 
     func launch() {
+        if Self.isUITesting {
+            // No single-instance takeover: a copy the developer is running keeps running
+            statusItem = StatusItemController(onOpen: { [unowned self] in showSettings() },
+                                              onSettings: { [unowned self] in showSettings() })
+            return
+        }
         // Newest instance wins: quit any older copies before this one installs its event tap
         singleInstanceService.start()
         // Clean up any orphaned temp audio files from a previous crash
@@ -70,9 +92,9 @@ final class AppCoordinator {
             onSettings: { [unowned self] in showSettings() }
         )
         capsule = RecordingCapsuleController(appState: appState)
-        observeState()
         permissionManager.checkAll()
-        startPipelineIfReady()
+        // Applies the current state once, which starts the pipeline if setup is complete
+        observeState()
         if FirstRunView.isNeeded(appState: appState, permissions: permissionManager) {
             firstRunWindow.show()
         }
@@ -99,23 +121,20 @@ final class AppCoordinator {
     // MARK: - State
 
     /// Follows the status (menu bar symbol, capsule) and setup completion for as long as the app runs.
+    /// Each call applies the current state once and re-registers for the next change.
     private func observeState() {
         withObservationTracking {
             _ = appState.status
             _ = appState.setupComplete
         } onChange: { [weak self] in
             // onChange fires before the new value is set, so read it on the next main-actor turn
-            Task { @MainActor in
-                guard let self else { return }
-                self.stateChanged()
-                self.observeState()
-            }
+            Task { @MainActor in self?.observeState() }
         }
         stateChanged()
     }
 
     private func stateChanged() {
-        statusItem?.setSymbol(StatusItemController.symbol(for: appState.status))
+        statusItem?.update(for: appState.status)
         capsule?.update(for: appState.status)
         if appState.setupComplete, pipeline == nil { startPipelineIfReady() }
     }
@@ -140,21 +159,28 @@ final class AppCoordinator {
         }
 
         // Attempt to start the hotkey tap — retried on every icon click in case
-        // accessibility was granted after the previous attempt (requires relaunch in practice)
+        // accessibility was granted after the previous attempt
         guard !AXIsProcessTrusted() else {
             Task {
                 // Never install a second tap while an older instance still holds one
                 await singleInstanceService.waitUntilResolved()
                 do {
                     try hotkeyService.start()
-                    appState.clearError()
+                    // Only the listener's own error is cleared; any other error stays for the user to read
+                    if let listenerError, appState.lastError == listenerError { appState.clearError() }
+                    listenerError = nil
                 } catch {
-                    appState.setError("Hotkey registration failed: \(error.localizedDescription). Try relaunching.")
+                    reportListenerError("Honyaku couldn't listen for the Control key: \(error.localizedDescription) Quit and reopen Honyaku to try again.")
                 }
             }
             return
         }
-        appState.setError("Accessibility not granted — open System Settings → Privacy & Security → Accessibility, add Honyaku, then relaunch.")
+        reportListenerError("Honyaku needs Accessibility to hear the Control key. Turn it on in System Settings → Privacy & Security → Accessibility, then click the menu bar icon.")
+    }
+
+    private func reportListenerError(_ message: String) {
+        listenerError = message
+        appState.setError(message)
     }
 
     // MARK: - Login item

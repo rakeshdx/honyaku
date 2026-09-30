@@ -3,8 +3,8 @@ import SwiftUI
 
 // MARK: - Menu bar icon
 
-/// The menu bar icon. A click opens Settings (or first run); a right-click or Control-click shows a
-/// small menu, since there's no popover to hold Quit.
+/// The menu bar icon. A click opens Settings (or first run); a right-click shows a small menu, since
+/// there's no popover to hold Quit. Control-click is a plain click: Control is the dictation key.
 @MainActor
 final class StatusItemController: NSObject {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -31,7 +31,7 @@ final class StatusItemController: NSObject {
         button.action = #selector(clicked)
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.setAccessibilityLabel("Honyaku")
-        setSymbol(Self.symbol(for: .idle))
+        update(for: .idle)
     }
 
     /// The state symbol shown in the menu bar.
@@ -44,15 +44,26 @@ final class StatusItemController: NSObject {
         }
     }
 
-    func setSymbol(_ name: String) {
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: "Honyaku")
+    /// What VoiceOver reads after "Honyaku".
+    nonisolated static func accessibilityValue(for status: AppStatus) -> String {
+        switch status {
+        case .idle: return "Ready"
+        case .recording: return "Recording"
+        case .transcribing: return "Transcribing"
+        case .processing: return "Cleaning up"
+        case .error(let message): return "Error: \(message)"
+        }
+    }
+
+    func update(for status: AppStatus) {
+        let image = NSImage(systemSymbolName: Self.symbol(for: status), accessibilityDescription: "Honyaku")
         image?.isTemplate = true
         item.button?.image = image
+        item.button?.setAccessibilityValue(Self.accessibilityValue(for: status))
     }
 
     @objc private func clicked() {
-        let event = NSApp.currentEvent
-        if event?.type == .rightMouseUp || event?.modifierFlags.contains(.control) == true {
+        if NSApp.currentEvent?.type == .rightMouseUp {
             guard let button = item.button else { return }
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.height + 4), in: button)
         } else {
@@ -66,24 +77,38 @@ final class StatusItemController: NSObject {
 
 // MARK: - Single windows
 
+extension NSWindow {
+    /// Brings the window to the front, restoring it from the Dock if it was minimised.
+    func bringForward() {
+        NSApp.activate(ignoringOtherApps: true)
+        if isMiniaturized { deminiaturize(nil) }
+        makeKeyAndOrderFront(nil)
+    }
+}
+
 /// One window hosting SwiftUI content. Showing it again brings the same window forward rather than
 /// opening a second; with `freshContentOnReopen`, a closed window starts over when it's shown again.
+/// A minimised window is only restored, never rebuilt.
 @MainActor
-final class HostedWindow: NSObject {
+final class HostedWindow: NSObject, NSWindowDelegate {
     private let title: String
     private let freshContentOnReopen: Bool
+    private let onClose: () -> Void
     private let makeContent: () -> AnyView
     private var window: NSWindow?
+    private var closed = false
 
-    init(title: String, freshContentOnReopen: Bool = false, content: @escaping () -> AnyView) {
+    init(title: String, freshContentOnReopen: Bool = false, onClose: @escaping () -> Void = {},
+         content: @escaping () -> AnyView) {
         self.title = title
         self.freshContentOnReopen = freshContentOnReopen
+        self.onClose = onClose
         self.makeContent = content
     }
 
     func show() {
         if let window {
-            if !window.isVisible, freshContentOnReopen {
+            if closed, freshContentOnReopen {
                 window.contentViewController = NSHostingController(rootView: makeContent())
             }
         } else {
@@ -92,11 +117,17 @@ final class HostedWindow: NSObject {
             window.title = title
             window.styleMask = [.titled, .closable, .miniaturizable]
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.center()
             self.window = window
         }
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
+        closed = false
+        window?.bringForward()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        closed = true
+        onClose()
     }
 }
 
@@ -141,8 +172,7 @@ final class SettingsWindowController: NSObject {
     func show() {
         let window = self.window ?? makeWindow()
         self.window = window
-        NSApp.activate(ignoringOtherApps: true)
-        window.makeKeyAndOrderFront(nil)
+        window.bringForward()
     }
 
     private func makeWindow() -> NSWindow {

@@ -143,15 +143,53 @@ struct PermissionStatusRow: View {
 
 // MARK: - Models
 
+/// Each model's install state and the retired model files, computed off the main thread so the Models
+/// tab never walks the disk while drawing. Refreshed when the tab appears, after a download, delete or
+/// Move to Trash, and when a background download starts or finishes — never on a progress tick.
+@MainActor
+final class ModelInstallStates: ObservableObject {
+    @Published private(set) var states: [String: InstallState] = [:]
+    @Published private(set) var retired: [RetiredModelFiles.Item] = []
+    /// Move to Trash failures, by folder
+    @Published private(set) var trashFailures: [URL: String] = [:]
+
+    static let models = ModelRegistry.speechModels + ModelRegistry.cleanupModels
+
+    func refresh() async { await refresh(Self.models) }
+
+    func refresh(_ models: [ModelInfo]) async {
+        let results = await Task.detached(priority: .userInitiated) {
+            models.map { ($0.id, ModelInstaller.state(of: $0)) }
+        }.value
+        for (id, state) in results { states[id] = state }
+    }
+
+    func refreshRetired() async {
+        retired = await Task.detached(priority: .userInitiated) { RetiredModelFiles.onDisk() }.value
+    }
+
+    func moveToTrash(_ item: RetiredModelFiles.Item) async {
+        do {
+            try FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
+            trashFailures[item.url] = nil
+        } catch {
+            trashFailures[item.url] = "Couldn't move it to the Trash: \(error.localizedDescription)"
+        }
+        await refreshRetired()
+    }
+}
+
 struct ModelsSettings: View {
     @Environment(AppState.self) private var appState
+    @StateObject private var installs = ModelInstallStates()
 
     var body: some View {
         @Bindable var appState = appState
         Form {
             Section {
                 ForEach(ModelRegistry.speechModels) { model in
-                    ModelSettingsRow(model: model, selectedID: $appState.selectedSpeechModelID)
+                    ModelSettingsRow(model: model, selectedID: $appState.selectedSpeechModelID,
+                                     state: installs.states[model.id]) { await installs.refresh([model]) }
                 }
             } header: {
                 Text("Speech")
@@ -160,30 +198,41 @@ struct ModelsSettings: View {
             }
             Section {
                 ForEach(ModelRegistry.cleanupModels) { model in
-                    ModelSettingsRow(model: model, selectedID: $appState.selectedCleanupModelID)
+                    ModelSettingsRow(model: model, selectedID: $appState.selectedCleanupModelID,
+                                     state: installs.states[model.id]) { await installs.refresh([model]) }
                 }
             } header: {
                 Text("Cleanup")
             } footer: {
                 Text("Removes filler words and adds punctuation, without changing what you said.").foregroundStyle(.secondary)
             }
-            OlderModelsSection()
+            OlderModelsSection(installs: installs)
         }
         .formStyle(.grouped)
         .frame(width: 500, height: 520)
+        .task {
+            await installs.refresh()
+            await installs.refreshRetired()
+        }
+        // A background download started or finished (the key set doesn't change on progress ticks)
+        .onChange(of: Set(appState.modelDownloads.keys)) { _, _ in
+            Task { await installs.refresh() }
+        }
     }
 }
 
 struct ModelSettingsRow: View {
     let model: ModelInfo
     @Binding var selectedID: String
+    /// nil until the Models tab has checked the disk
+    let state: InstallState?
+    /// Re-checks this model's state after a download or delete
+    let onChange: () async -> Void
     @Environment(AppState.self) private var appState
     @State private var isDownloading = false
     @State private var progress: Double = 0
     @State private var failure: String?
-    @State private var refresh = 0  // re-evaluates disk state after download or delete
 
-    private var state: InstallState { _ = refresh; return ModelInstaller.state(of: model) }
     private var isSelected: Bool { selectedID == model.id }
 
     var body: some View {
@@ -202,17 +251,19 @@ struct ModelSettingsRow: View {
                 ProgressView(value: background).frame(width: 90)
             } else {
                 switch state {
-                case .installed:
+                case .installed?:
                     if isSelected {
                         Text("In use").font(.callout).foregroundStyle(Theme.ai)
                     } else {
                         Button("Delete", role: .destructive, action: delete)
                         Button("Use") { selectedID = model.id }
                     }
-                case .incomplete:
+                case .incomplete?:
                     Button("Resume download", action: download)
-                case .notInstalled:
+                case .notInstalled?:
                     Button("Download", action: download)
+                case nil:
+                    EmptyView()
                 }
             }
         }
@@ -226,7 +277,7 @@ struct ModelSettingsRow: View {
         if let failure { return failure }
         if isDownloading { return "Downloading, \(Int(progress * Double(model.sizeMB))) of \(model.sizeMB) MB" }
         if let background { return "Downloading, \(Int(background * Double(model.sizeMB))) of \(model.sizeMB) MB" }
-        if case .installed(let bytes) = state {
+        if case .installed(let bytes)? = state {
             return "\(ModelCopy.summary(for: model)), \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) on disk"
         }
         return "\(ModelCopy.summary(for: model)), \(ModelCopy.size(mb: model.sizeMB))"
@@ -244,15 +295,20 @@ struct ModelSettingsRow: View {
             } catch {
                 failure = "Download didn't finish. Check your connection and try again."
             }
+            await onChange()
             isDownloading = false
-            refresh += 1
         }
     }
 
     private func delete() {
+        failure = nil
         Task {
-            do { try await ModelInstaller.shared.delete(model) } catch { failure = "Couldn't delete the model files." }
-            refresh += 1
+            do {
+                try await ModelInstaller.shared.delete(model)
+            } catch {
+                failure = "Couldn't delete the model files: \(error.localizedDescription)"
+            }
+            await onChange()
         }
     }
 }
@@ -260,22 +316,26 @@ struct ModelSettingsRow: View {
 /// Files from models earlier versions of Honyaku offered, which the registry no longer lists.
 /// Removed to the Trash rather than deleted outright, so a mistake can be undone.
 struct OlderModelsSection: View {
-    @State private var models = RetiredModelFiles.onDisk()
+    @ObservedObject var installs: ModelInstallStates
 
     var body: some View {
-        if !models.isEmpty {
+        if !installs.retired.isEmpty {
             Section {
-                ForEach(models, id: \.url) { model in
+                ForEach(installs.retired, id: \.url) { model in
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(model.name)
-                            Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file) + " on disk")
-                                .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                            if let failure = installs.trashFailures[model.url] {
+                                Text(failure).font(.callout).foregroundStyle(.orange)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            } else {
+                                Text(ByteCountFormatter.string(fromByteCount: model.bytes, countStyle: .file) + " on disk")
+                                    .font(.callout).foregroundStyle(.secondary).monospacedDigit()
+                            }
                         }
                         Spacer()
                         Button("Move to Trash", role: .destructive) {
-                            try? FileManager.default.trashItem(at: model.url, resultingItemURL: nil)
-                            models = RetiredModelFiles.onDisk()
+                            Task { await installs.moveToTrash(model) }
                         }
                     }
                     .padding(.vertical, 2)
@@ -283,7 +343,8 @@ struct OlderModelsSection: View {
             } header: {
                 Text("Older models")
             } footer: {
-                Text("Earlier versions of Honyaku used these. They're no longer needed.").foregroundStyle(.secondary)
+                Text("Earlier versions of Honyaku downloaded these. If another app uses WhisperKit, it may use them too.")
+                    .foregroundStyle(.secondary)
             }
         }
     }
@@ -432,6 +493,7 @@ struct HistorySettings: View {
 private struct HistoryRow: View {
     let entry: TranscriptEntry
     let onDelete: () -> Void
+    @State private var copied = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -440,17 +502,41 @@ private struct HistoryRow: View {
                 .lineSpacing(Theme.transcriptLineSpacing)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            Text(entry.timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(entry.timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                // Visible and in the key loop, not only in the context menu
+                HStack(spacing: 6) {
+                    Button(action: copy) {
+                        Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    }
+                    .help("Copy")
+                    .accessibilityLabel(copied ? "Copied" : "Copy")
+                    Button(role: .destructive, action: onDelete) {
+                        Image(systemName: "trash")
+                    }
+                    .help("Delete")
+                    .accessibilityLabel("Delete")
+                }
+                .buttonStyle(.borderless)
+                .foregroundStyle(.secondary)
+            }
         }
         .padding(.vertical, 4)
         .contextMenu {
-            Button("Copy") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(entry.cleanedText, forType: .string)
-            }
+            Button("Copy", action: copy)
             Button("Delete", role: .destructive, action: onDelete)
+        }
+    }
+
+    private func copy() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(entry.cleanedText, forType: .string)
+        copied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            copied = false
         }
     }
 }
@@ -462,6 +548,7 @@ struct PrivacySettings: View {
     @State private var revealToken = false
     @State private var tokenInput = ""
     @State private var tokenSaved = false
+    @State private var tokenError: String?
 
     var body: some View {
         Form {
@@ -484,12 +571,8 @@ struct PrivacySettings: View {
                         Button(revealToken ? "Hide" : "Show") { revealToken.toggle() }
                     }
                     HStack {
-                        Button("Save token") {
-                            try? KeychainService.save(key: KeychainService.hfTokenKey, value: tokenInput)
-                            tokenSaved = true
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { tokenSaved = false }
-                        }
-                        .disabled(tokenInput.isEmpty)
+                        Button("Save token", action: saveToken)
+                            .disabled(tokenInput.isEmpty)
                         if tokenSaved { Text("Saved").foregroundStyle(Theme.ai) }
                         Spacer()
                         Button("Remove token", role: .destructive) {
@@ -498,11 +581,31 @@ struct PrivacySettings: View {
                         }
                         .disabled(tokenInput.isEmpty)
                     }
+                    if let tokenError {
+                        Text(tokenError)
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
             }
         }
         .formStyle(.grouped)
         .frame(width: 500, height: showAdvanced ? 440 : 300)
         .onAppear { tokenInput = KeychainService.load(key: KeychainService.hfTokenKey) ?? "" }
+        // The token is hidden again whenever the tab is left
+        .onDisappear { revealToken = false }
+    }
+
+    private func saveToken() {
+        do {
+            try KeychainService.save(key: KeychainService.hfTokenKey, value: tokenInput)
+            tokenError = nil
+            tokenSaved = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { tokenSaved = false }
+        } catch {
+            tokenSaved = false
+            tokenError = "Couldn't save the token to your Keychain: \(error.localizedDescription) Try again."
+        }
     }
 }
