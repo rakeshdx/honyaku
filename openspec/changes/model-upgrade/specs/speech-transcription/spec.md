@@ -56,6 +56,27 @@ Once setup is complete, the system SHALL load the selected speech model (Parakee
 - **WHEN** Honyaku launches
 - **THEN** warm-up skips it and nothing is downloaded until the user's first dictation needs it
 
+---
+
+### Requirement: Non-speech annotations are never pasted
+Before the transcript is used, the system SHALL remove Whisper's non-speech annotations: any text in square brackets (for example `[BLANK_AUDIO]`, `[MUSIC]`), and any segment made up entirely of a parenthesised annotation (for example `(silence)`) or an asterisk-wrapped sound description (for example `*thud*`). If nothing is left, the recording SHALL be treated as silence: no text is pasted, no history entry is added, and no error is shown.
+
+#### Scenario: Text in scripts without spaces keeps its spacing
+- **WHEN** a multilingual model transcribes two Japanese sentences as separate segments
+- **THEN** the pasted text has no space inserted between them
+
+#### Scenario: Silent hold
+- **WHEN** the user holds Control for about 2 seconds without speaking and Whisper returns `[BLANK_AUDIO]`
+- **THEN** nothing is pasted and no error is shown
+
+#### Scenario: Annotation around real speech
+- **WHEN** Whisper returns `[MUSIC] send the report`
+- **THEN** only `send the report` is pasted
+
+#### Scenario: Sound description in asterisks
+- **WHEN** Whisper returns `*thud*` for a dictation
+- **THEN** nothing is pasted and no error is shown
+
 ## ADDED Requirements
 
 ### Requirement: Silent recordings are discarded before transcription

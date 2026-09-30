@@ -82,6 +82,17 @@ final class NonSpeechAnnotationTests: XCTestCase {
                        "昨日は雨でした。今日は晴れです。")
     }
 
+    func testAsteriskSoundDescriptionIsRemoved() {
+        XCTAssertEqual(TranscriptionService.stripNonSpeech("*thud*"), "")
+        XCTAssertEqual(TranscriptionService.assembleText(windowTexts: [" *laughs* Send it now."],
+                                                         segmentTexts: [" *laughs*", " Send it now."]),
+                       "Send it now.")
+    }
+
+    func testAsterisksInSpeechAreKept() {
+        XCTAssertEqual(TranscriptionService.stripNonSpeech("I *really* mean it"), "I *really* mean it")
+    }
+
     func testParenthesesInSpeechAreKept() {
         XCTAssertEqual(TranscriptionService.stripNonSpeech("call me (maybe) later"), "call me (maybe) later")
     }

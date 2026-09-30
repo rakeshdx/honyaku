@@ -188,7 +188,7 @@ actor TranscriptionService: ASRService {
     static func assembleText(windowTexts: [String], segmentTexts: [String]) -> String {
         var text = windowTexts.map(stripTokens).joined(separator: " ")
         for segment in segmentTexts.map(stripTokens)
-        where segment.range(of: #"^\([^)]*\)$"#, options: .regularExpression) != nil {
+        where segment.range(of: annotationOnly, options: .regularExpression) != nil {
             if let range = text.range(of: segment) { text.removeSubrange(range) }
         }
         return stripNonSpeech(text)
@@ -208,9 +208,13 @@ actor TranscriptionService: ASRService {
         let unbracketed = text.replacingOccurrences(of: #"\[[^\]]*\]"#, with: " ", options: .regularExpression)
         let collapsed = unbracketed.replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
-        if collapsed.range(of: #"^\([^)]*\)$"#, options: .regularExpression) != nil { return "" }
+        if collapsed.range(of: annotationOnly, options: .regularExpression) != nil { return "" }
         return collapsed
     }
+
+    /// Text that is only a sound description, like "(silence)" or "*thud*". Only whole segments go:
+    /// parentheses and asterisks inside real speech ("I *really* mean it") stay.
+    private static let annotationOnly = #"^(\([^)]*\)|\*[^*]*\*)$"#
 
     static func deleteTempFile(_ url: URL) {
         guard url.path.hasPrefix(NSTemporaryDirectory()),

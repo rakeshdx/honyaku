@@ -37,8 +37,8 @@
 ## 7. Verification
 
 - [x] 7.1 Clean build with no warnings; unit and integration tests pass
-- [ ] 7.2 Developer: dictate with Parakeet (short words, sentences, silence), then switch to Whisper large-v3-turbo and dictate in another language
-- [ ] 7.3 Developer: launch with the old Qwen 2.5 and small.en selections saved; they migrate, and the new models download on first use
+- [x] 7.2 Developer: dictate with Parakeet (short words, sentences, silence), then switch to Whisper large-v3-turbo and dictate in another language
+- [x] 7.3 Developer: launch with the old Qwen 2.5 and small.en selections saved; they migrate, and the new models download on first use
 - [ ] 7.4 Developer: offline dictation with Parakeet (Wi-Fi off)
 
 ## 8. Benchmark follow-ups
@@ -53,4 +53,4 @@
 - [x] 9.1 Dictation reads the saved speech model each time, so switching in Settings applies without relaunch
 - [x] 9.2 `dictationLanguage` setting: `decodeOptions(forDurationSeconds:language:)`, `WhisperKitEngine` reads it per dictation; unit tests (chosen language disables detection; nil detects)
 - [x] 9.3 Settings picker: Auto-detect plus languages by name, disabled with a caption for English-only models
-- [ ] 9.4 Benchmark: the Italian clip with the language set to Italian; developer check with short Italian and Japanese phrases
+- [x] 9.4 Benchmark: the Italian clip with the language set to Italian; developer check with short Italian and Japanese phrases
