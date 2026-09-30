@@ -65,4 +65,4 @@
 - [x] 8.13 Theme: 15 pt semibold step titles, 1.3 transcript line height, `controlRadius` removed
 - [x] 8.14 UI tests: `-HonyakuUITestSetupComplete` (Debug only); fail when the icon is missing; exactly one window
 - [x] 8.15 Gates: `xcodegen generate`, clean build with no warnings, unit tests, `HonyakuUITests`, `openspec validate ui-redesign --strict`
-- [ ] 8.16 Developer: Try it and then close the window mid-dictation (nothing pasted or saved); dictate, then click the icon before the text arrives (saved to History, not pasted into Settings); Control-click the icon (no menu); re-press Control during the capsule's fade; minimise Settings and click the icon; dark-mode buttons
+- [x] 8.16 Developer: Try it and then close the window mid-dictation (nothing pasted or saved); dictate, then click the icon before the text arrives (saved to History, not pasted into Settings); Control-click the icon (no menu); re-press Control during the capsule's fade; minimise Settings and click the icon; dark-mode buttons
