@@ -17,19 +17,22 @@ The system SHALL pass the raw WhisperKit transcript to a locally-running LLM (vi
 ---
 
 ### Requirement: Multiple cleanup model tiers are supported
-The system SHALL support at minimum the following cleanup model tiers selectable by the user:
+The system SHALL offer the following cleanup models:
 
-| Tier | Model | Size | Speed |
+| Tier | Model | Size | Default for |
 |---|---|---|---|
-| Fast | Qwen 2.5 1.5B Instruct 4-bit (MLX) | ~950 MB | ~2–3s |
-| Balanced | Qwen 2.5 3B Instruct 4-bit (MLX) | ~1.9 GB | ~5–6s |
-| Best | Qwen 2.5 7B Instruct 4-bit (MLX) | ~4.3 GB | ~10–15s |
+| Fast | Qwen3-1.7B 4-bit (`mlx-community/Qwen3-1.7B-4bit`), thinking off | ~968 MB | Macs under 16 GB |
+| Best | Qwen3-4B-Instruct-2507 4-bit (`mlx-community/Qwen3-4B-Instruct-2507-4bit`) | ~2.3 GB | Macs with 16 GB or more |
 
-#### Scenario: User has selected the Fast tier
+The measured latency for each tier on the developer's Mac SHALL be recorded in the design, and shown to users as a relative speed ("faster" or "more accurate"), not as seconds.
+
+#### Scenario: User has the Fast tier selected
 - **WHEN** transcription completes and cleanup is triggered
-- **THEN** the system uses the Qwen 2.5 1.5B MLX model for cleanup and returns a result in under 3 seconds on M1 hardware
+- **THEN** the system cleans the text with Qwen3-1.7B, with thinking turned off
 
----
+#### Scenario: User has the Best tier selected
+- **WHEN** transcription completes and cleanup is triggered
+- **THEN** the system cleans the text with Qwen3-4B-Instruct-2507
 
 ### Requirement: Cleanup can be disabled
 The system SHALL provide a toggle in Settings to disable LLM cleanup, in which case the raw WhisperKit transcript is pasted directly.
@@ -56,6 +59,8 @@ The system SHALL expose the LLM system prompt used for cleanup in Settings, allo
 ### Requirement: Cleaned text is pasted into the active application
 The system SHALL write the cleaned (or raw, if cleanup is disabled) transcript to the system pasteboard and simulate a ⌘V keystroke to paste it into the frontmost application. The user's prior pasteboard contents SHALL be restored after the paste.
 
+If Honyaku itself is the frontmost app when the text is ready (for example, the user brought Settings forward while the dictation was being transcribed), the system SHALL NOT send ⌘V. It SHALL save the transcript to history and show "Saved to History — Honyaku was in front", and SHALL leave the clipboard untouched.
+
 #### Scenario: Successful paste after cleanup
 - **WHEN** cleanup completes and the user has a text field focused
 - **THEN** the cleaned text appears at the cursor position in the active application and the user's prior clipboard content is restored
@@ -64,9 +69,14 @@ The system SHALL write the cleaned (or raw, if cleanup is disabled) transcript t
 - **WHEN** cleanup completes but no editable field is focused
 - **THEN** the text is written to the pasteboard and a notification indicates the text is ready to paste manually
 
+#### Scenario: Honyaku is in front when the text is ready
+- **GIVEN** the user started a dictation in another app, then clicked the menu bar icon so Settings came to the front
+- **WHEN** the transcript is ready
+- **THEN** no ⌘V is sent, the transcript is added to history, the status reads "Saved to History — Honyaku was in front", and the clipboard is unchanged
+
 #### Scenario: Paste simulation fails or pipeline is aborted
 - **WHEN** the paste simulation fails or the transcription pipeline is cancelled before completion
-- **THEN** any transcript text written to the pasteboard is cleared within 5 seconds and the prior clipboard contents are restored, and a notification is shown in the menu bar popover
+- **THEN** any transcript text written to the pasteboard is cleared within 5 seconds and the prior clipboard contents are restored, and the error is shown on the menu bar icon and in Settings > General
 
 ### Requirement: The default cleanup prompt never drops content
 The default cleanup prompt SHALL instruct the model to keep every word the speaker said, in order, apart from the listed filler words and false starts. Its worked examples SHALL only remove what the faithfulness check allows, so that following them never triggers the fallback. It SHALL forbid shortening, summarising or rephrasing. A cleanup prompt the user has customised SHALL NOT be changed automatically.
@@ -159,4 +169,50 @@ After posting ⌘V, the system SHALL wait at least 500 ms before restoring the u
 #### Scenario: Dictating in quick succession
 - **WHEN** the user presses Control again right after a paste, before the clipboard restore has run
 - **THEN** the new press is recorded and pasted, and after the last paste the user's original clipboard (not an earlier transcript) is restored
+
+### Requirement: Cleanup adds little latency
+The system SHALL keep cleanup fast by:
+- reusing the processed system prompt between dictations for the same model and prompt
+- capping generated output at a token limit derived from the input length
+- turning off any model "thinking" mode through the chat template
+
+On the developer's Mac, the median time spent in cleanup for a one-sentence dictation SHALL be recorded for each tier, and SHALL be under 0.5 s for the Fast tier.
+
+#### Scenario: Repeated dictations
+- **WHEN** the user dictates several times in a row with the same model and prompt
+- **THEN** the system prompt is processed once, not on every dictation
+
+#### Scenario: Model starts to ramble
+- **WHEN** the model would produce much more text than was dictated
+- **THEN** generation stops at the token cap, and the faithfulness check falls back to the raw words
+
+#### Scenario: Thinking-capable model
+- **WHEN** the selected model supports a thinking mode
+- **THEN** the chat template is given `enable_thinking: false`, and no reasoning text is produced or pasted
+
+---
+
+### Requirement: Unambiguous fillers never reach the paste
+When the transcript's language is English, the system SHALL remove "um", "umm", "uh" and "hmm" (as whole words, not inside words like "uh-huh") from the text before pasting, whatever the model returned, including when cleanup is off or falls back. For any other language these are not treated as fillers: they SHALL be kept, and the faithfulness check SHALL treat every word of a non-English transcript as content, because "um" is a real word in German ("um 5 Uhr") and Portuguese ("um carro").
+
+#### Scenario: Model leaves a filler in
+- **WHEN** the model returns "I think we should uh ship it" for an English dictation
+- **THEN** "I think we should ship it" is pasted
+
+#### Scenario: German dictation
+- **WHEN** Whisper transcribes "Ich komme um 5 Uhr" with language German
+- **THEN** "um" is kept in the pasted text, and a cleanup output that drops it is rejected
+
+#### Scenario: Portuguese dictation
+- **WHEN** Whisper transcribes "Comprei um carro" with language Portuguese
+- **THEN** "um" is kept in the pasted text
+
+---
+
+### Requirement: The speaker-label rule is only given when labels are present
+The cleanup prompt SHALL include the instruction to keep `[Speaker N]` labels only when the transcript contains such labels.
+
+#### Scenario: Ordinary dictation
+- **WHEN** a transcript without speaker labels is cleaned
+- **THEN** the prompt sent to the model contains no speaker-label rule, and the output contains no `[Speaker N]` label
 
