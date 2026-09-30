@@ -55,3 +55,16 @@ Once setup is complete, the system SHALL load the selected speech model (Parakee
 - **GIVEN** the selected speech model hasn't been downloaded
 - **WHEN** Honyaku launches
 - **THEN** warm-up skips it and nothing is downloaded until the user's first dictation needs it
+
+## ADDED Requirements
+
+### Requirement: Silent recordings are discarded before transcription
+Before transcribing, the system SHALL measure the recording's loudness. If no 100 ms window rises above −45 dBFS RMS, the recording SHALL be treated as silence and discarded silently, without calling the speech model. That stops models inventing text such as "Thank you." for silence.
+
+#### Scenario: Silent hold with Whisper
+- **WHEN** the user holds Control without speaking, with Whisper large-v3-turbo selected
+- **THEN** nothing is pasted, and the speech model is not run
+
+#### Scenario: Quiet speech
+- **WHEN** the user speaks quietly but audibly
+- **THEN** the recording is transcribed as usual

@@ -91,6 +91,22 @@ final class AudioCaptureService {
         prepare()
     }
 
+    /// True when no 100 ms window of 16 kHz audio rises above −45 dBFS RMS: the user held Control but
+    /// didn't speak. Speech, even quiet speech, sits well above that; a mic's noise floor sits below.
+    static func isSilent(samples16k samples: [Float], thresholdDBFS: Float = -45) -> Bool {
+        let window = 1_600
+        let threshold = powf(10, thresholdDBFS / 20)
+        var start = 0
+        while start < samples.count {
+            let end = min(start + window, samples.count)
+            var sum: Float = 0
+            for i in start..<end { sum += samples[i] * samples[i] }
+            if (sum / Float(end - start)).squareRoot() > threshold { return false }
+            start = end
+        }
+        return true
+    }
+
     // MARK: - Microphone enumeration
 
     static func availableInputDevices() -> [AVCaptureDevice] {

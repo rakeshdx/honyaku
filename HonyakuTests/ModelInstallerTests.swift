@@ -32,7 +32,8 @@ final class ModelInstallerTests: XCTestCase {
     }
 
     func testParakeetFolderIsNamedForFluidAudio() {
-        XCTAssertEqual(ModelInstaller.parakeetFolder(base: root).lastPathComponent, "parakeet-tdt-0.6b-v2-coreml")
+        // FluidAudio strips "-coreml" from the repo name when it picks its download folder
+        XCTAssertEqual(ModelInstaller.parakeetFolder(base: root).lastPathComponent, "parakeet-tdt-0.6b-v2")
     }
 
     // MARK: MLX

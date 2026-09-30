@@ -39,3 +39,21 @@ On the developer's Mac, the median time spent in cleanup for a one-sentence dict
 #### Scenario: Thinking-capable model
 - **WHEN** the selected model supports a thinking mode
 - **THEN** the chat template is given `enable_thinking: false`, and no reasoning text is produced or pasted
+
+---
+
+### Requirement: Unambiguous fillers never reach the paste
+After cleanup, and also when cleanup is off or falls back, the system SHALL remove "um", "umm", "uh" and "hmm" (as whole words, not inside words like "uh-huh") from the text before pasting, whatever the model returned.
+
+#### Scenario: Model leaves a filler in
+- **WHEN** the model returns "I think we should uh ship it"
+- **THEN** "I think we should ship it" is pasted
+
+---
+
+### Requirement: The speaker-label rule is only given when labels are present
+The cleanup prompt SHALL include the instruction to keep `[Speaker N]` labels only when the transcript contains such labels.
+
+#### Scenario: Ordinary dictation
+- **WHEN** a transcript without speaker labels is cleaned
+- **THEN** the prompt sent to the model contains no speaker-label rule, and the output contains no `[Speaker N]` label

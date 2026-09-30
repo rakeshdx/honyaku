@@ -105,7 +105,10 @@ actor ModelInstaller {
 
     /// FluidAudio requires the folder to be named after its repo.
     nonisolated static func parakeetFolder(base: URL = ModelStore.shared.baseDirectory) -> URL {
-        base.appending(path: "speech/parakeet-tdt-0.6b-v2-coreml", directoryHint: .isDirectory)
+        // FluidAudio writes into <parent>/<its own folder name> whatever last component it's given,
+        // so take the name from FluidAudio rather than hard-coding it
+        base.appending(path: "speech", directoryHint: .isDirectory)
+            .appending(path: Repo.parakeetV2.folderName, directoryHint: .isDirectory)
     }
 
     /// Every Core ML bundle FluidAudio loads for v2 must be whole; an interrupted download can leave a

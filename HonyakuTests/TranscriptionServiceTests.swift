@@ -97,6 +97,15 @@ final class LocalSpeechModelTests: XCTestCase {
         XCTAssertFalse(TranscriptionService.isTokenizerDownloaded(variant: "distil-whisper_large", documents: root))
     }
 
+    func testTokenizerNameDropsSizeSuffixAndDateStamp() {
+        XCTAssertEqual(TranscriptionService.tokenizerName(forVariant: "openai_whisper-tiny.en"), "openai/whisper-tiny.en")
+        XCTAssertEqual(TranscriptionService.tokenizerName(forVariant: "openai_whisper-large-v3-v20240930_626MB"),
+                       "openai/whisper-large-v3")
+        XCTAssertEqual(TranscriptionService.tokenizerName(forVariant: "openai_whisper-large-v3_turbo_954MB"),
+                       "openai/whisper-large-v3")
+        XCTAssertNil(TranscriptionService.tokenizerName(forVariant: "distil-whisper_distil-large-v3"))
+    }
+
     func testInterruptedModelIsNotDownloaded() throws {
         try makeModel(["AudioEncoder", "TextDecoder"])
         // Folder exists but compiled data never landed

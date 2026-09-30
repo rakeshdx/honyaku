@@ -51,10 +51,13 @@ final class ModelBenchmarkTests: IntegrationTestBase {
             report.append("| \(model.id) | \(Self.percent(wer)) | \(Self.ms(Self.median(times))) | \(Self.ms(times.max() ?? 0)) |")
             XCTAssertLessThan(wer, 0.3, "\(model.id) is far off on clean TTS audio — the engine is likely broken")
 
-            // Silence must come back empty so the pipeline discards it
+            // The pipeline's silence gate must stop silence reaching the model; what the engine alone
+            // does with it is only reported (Whisper says "Thank you.")
             let silence = try Self.renderSilence(seconds: 2)
-            let silent = try await transcribe(silence, with: service, model: model)
-            XCTAssertEqual(silent, "", "\(model.id) produced text for silence")
+            let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: silence.path)
+            XCTAssertTrue(AudioCaptureService.isSilent(samples16k: samples), "Silence gate missed a silent clip")
+            let engineAlone = try await transcribe(silence, with: service, model: model)
+            print("Silence, \(model.id) without the gate: \(engineAlone.isEmpty ? "(empty)" : "\"\(engineAlone)\"")")
         }
         try XCTSkipUnless(measuredAny, "No speech model is installed")
         print(report.joined(separator: "\n"))
@@ -76,7 +79,7 @@ final class ModelBenchmarkTests: IntegrationTestBase {
     ]
 
     func testCleanupTiers() async throws {
-        var report = ["| Cleanup model | Faithful | Cold (first) | Median | 90th pct |", "|---|---|---|---|---|"]
+        var report = ["| Cleanup model | Faithful | Fillers removed | Cold (first) | Median | 90th pct |", "|---|---|---|---|---|---|"]
         var measuredAny = false
 
         for model in ModelRegistry.cleanupModels where ModelInstaller.isInstalled(model) {
@@ -89,15 +92,21 @@ final class ModelBenchmarkTests: IntegrationTestBase {
             let cold = (ContinuousClock.now - coldStart).seconds
 
             var faithful = 0
+            var fillersRemoved = 0, hadFillers = 0
             var times: [Double] = []
             for raw in Self.cleanupInputs {
                 let start = ContinuousClock.now
                 let output = try await service.modelOutput(for: raw, prompt: prompt)
                 times.append((ContinuousClock.now - start).seconds)
                 if CleanupService.isFaithful(raw: raw, cleaned: output) { faithful += 1 }
+                // A model that echoes its input is "faithful" but cleans nothing, so score removal too
+                if Self.hasUnambiguousFiller(raw) {
+                    hadFillers += 1
+                    if !Self.hasUnambiguousFiller(output) { fillersRemoved += 1 }
+                }
             }
             let median = Self.median(times)
-            report.append("| \(model.id) | \(faithful)/\(Self.cleanupInputs.count) | \(Self.ms(cold)) | \(Self.ms(median)) | \(Self.ms(Self.percentile(times, 0.9))) |")
+            report.append("| \(model.id) | \(faithful)/\(Self.cleanupInputs.count) | \(fillersRemoved)/\(hadFillers) | \(Self.ms(cold)) | \(Self.ms(median)) | \(Self.ms(Self.percentile(times, 0.9))) |")
             if model.tier == "fast" {
                 XCTAssertLessThan(median, 0.5, "Spec: the Fast tier's median cleanup time must be under 0.5 s")
             }
@@ -107,6 +116,10 @@ final class ModelBenchmarkTests: IntegrationTestBase {
     }
 
     // MARK: - Helpers
+
+    private static func hasUnambiguousFiller(_ text: String) -> Bool {
+        !Set(text.lowercased().split { !$0.isLetter }.map(String.init)).isDisjoint(with: ["um", "umm", "uh", "hmm"])
+    }
 
     private func transcribe(_ clip: URL, with service: TranscriptionService, model: Honyaku.ModelInfo) async throws -> String {
         // The service deletes its input, so hand it a copy named like a real dictation

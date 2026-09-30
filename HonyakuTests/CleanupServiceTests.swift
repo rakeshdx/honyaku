@@ -112,3 +112,16 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertEqual(CleanupService.stripDelimiters("<think>\nThe user said…\n</think>\n\nSend it."), "Send it.")
     }
 }
+
+final class CleanupPromptAssemblyTests: XCTestCase {
+    func testLabelRuleOnlyWhenLabelsPresent() {
+        XCTAssertFalse(CleanupService.prompt(CleanupService.defaultPrompt, for: "send it today")
+            .contains(CleanupService.speakerLabelRule))
+        XCTAssertTrue(CleanupService.prompt(CleanupService.defaultPrompt, for: "[Speaker 1] hi [Speaker 2] hello")
+            .hasSuffix(CleanupService.speakerLabelRule))
+    }
+
+    func testDefaultPromptHasNoLabelRule() {
+        XCTAssertFalse(CleanupService.defaultPrompt.contains("[Speaker"))
+    }
+}

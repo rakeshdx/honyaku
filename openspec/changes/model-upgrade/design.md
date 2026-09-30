@@ -67,7 +67,7 @@ Cleanup entries carry `chatTemplateContext: [String: Sendable]`, passed as `Chat
 
 ### 3. Where models live
 
-- **Parakeet:** `~/Library/Application Support/Honyaku/Models/speech/parakeet-tdt-0.6b-v2-coreml`. FluidAudio requires that exact last folder name. Keeping it under Honyaku's folder means Delete and disk-usage work like the other models. Loading always uses `loadLocal`, never the `ModelHub`-backed `load`, which would fetch anything missing.
+- **Parakeet:** `~/Library/Application Support/Honyaku/Models/speech/parakeet-tdt-0.6b-v2`. FluidAudio's `download(to:)` ignores the last path component and always writes to `<parent>/<Repo.folderName>`, which is the repo name without "-coreml". So the path comes from `Repo.parakeetV2.folderName`, not a hard-coded string. Keeping it under Honyaku's folder means Delete and disk-usage work like the other models. Loading always uses `loadLocal`, never the `ModelHub`-backed `load`, which would fetch anything missing.
 - **Whisper:** stays where WhisperKit's Hub layout puts it (`~/Documents/huggingface/models/argmaxinc/whisperkit-coreml/<variant>`), using the existing local-first loader.
 - **MLX:** unchanged, under Honyaku's `ModelStore` directory.
 
@@ -153,6 +153,27 @@ These are where the implementation differs from the decisions above, and why.
 - **Benchmarks:** `CleanupService(modelID:)` can pin one model, so the benchmark compares tiers without changing the user's saved selection.
 - **README:** the integration-test command now uses `TEST_RUNNER_INTEGRATION_TESTS=1`. The old `INTEGRATION_TESTS=1` never reached the test process.
 
+### 9. What the benchmark changed
+
+The first benchmark run exposed two problems the design hadn't anticipated.
+- **The speaker-label rule broke Qwen3-4B.** With the original prompt, it answered "[Speaker 1]" to 4 of 10 sentences containing a filler, whether or not the prompt cache was reused (a probe compared fresh and reused runs and found them identical).
+- **Qwen3-1.7B barely removed fillers.** It echoed its input, which scored "faithful" but did no cleaning.
+
+A probe compared three prompts on both models, scoring "faithful, and fillers removed" across 10 sentences:
+
+| Prompt | Qwen3-1.7B | Qwen3-4B |
+|---|---|---|
+| current | 4/10 | 6/10 |
+| without the label rule | 6/10 | 10/10 |
+| short and direct | 8/10 | 10/10 |
+
+Changes made as a result:
+- The default prompt becomes the short one: delete the fillers, add punctuation and capitals, change nothing else, output only the transcript, plus the same two worked examples.
+- The speaker-label rule is appended only when the transcript contains `[Speaker`.
+- `removeUnambiguousFillers` always runs on the final text, whether it came from the model, the fallback or with cleanup off.
+- The benchmark scores filler removal alongside faithfulness.
+- **Silence gate:** Whisper large-v3-turbo returned "Thank you." for a silent clip. The pipeline now computes a 100 ms-window RMS over the 16 kHz samples, and skips transcription when no window exceeds −45 dBFS. Parakeet already returned empty text for silence; the gate covers every engine.
+
 ## Risks / Trade-offs
 
 - **[Risk] Parakeet and Whisper both compile for the Neural Engine at first load (seconds to minutes).** → Compile at install time (Decision 4). Launch warm-up loads a compiled model.
@@ -164,4 +185,27 @@ These are where the implementation differs from the decisions above, and why.
 
 ## Measured
 
-To be filled in by the benchmark (task 5) before merging.
+Measured on the developer's Mac (M3 Max, 36 GB, macOS 26.6.2) on 2026-09-30, with warm models and after the design Decision 9 fixes.
+
+**Speech:** 12 `say`-rendered sentences, 1–8 s long. The WER compares engines relative to each other; TTS audio is cleaner than a real mic.
+
+| Model | WER | Median time | Slowest | Silence, engine alone |
+|---|---|---|---|---|
+| parakeet-tdt-v2 | 4.2% | 52 ms | 58 ms | empty |
+| whisper-large-v3-turbo | 5.0% | 810 ms | 871 ms | "Thank you." (stopped by the silence gate) |
+
+**Cleanup:** 8 held-out sentences, 4 of them with fillers. Faithful means `isFaithful` passes on the model's own output.
+
+| Model | Faithful | Fillers removed | Cold (first call) | Median | 90th pct |
+|---|---|---|---|---|---|
+| qwen3-1.7b | 8/8 | 4/4 | 1250 ms | 158 ms | 174 ms |
+| qwen3-4b-2507 | 8/8 | 4/4 | 1389 ms | 307 ms | 334 ms |
+
+**Defaults confirmed:**
+- Parakeet for speech on every Mac: better accuracy than Whisper, and about 15× faster.
+- Qwen3-1.7B under 16 GB. Its 158 ms median meets the Fast-tier target of under 0.5 s.
+- Qwen3-4B at 16 GB and above, which is still well under half a second.
+
+**Before the Decision 9 fixes:**
+- Qwen3-4B was faithful on only 6/8 sentences, with a 90th percentile of 1193 ms, because it answered "[Speaker 1]".
+- Qwen3-1.7B removed almost no fillers.

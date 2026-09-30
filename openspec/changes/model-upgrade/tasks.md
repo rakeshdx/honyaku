@@ -22,13 +22,13 @@
 
 - [x] 4.1 `maxTokens` cap; `enable_thinking: false` through `additionalContext` for Qwen3-1.7B
 - [x] 4.2 System-prompt reuse per (model, prompt), with the history reset each call, or the fallbacks in design Decision 5
-- [ ] 4.3 Cleanup integration tests pass on both new tiers (faithfulness on the model's own output)
+- [x] 4.3 Cleanup integration tests pass on both new tiers (faithfulness on the model's own output)
 
 ## 5. Benchmark and defaults
 
 - [x] 5.1 `ModelBenchmarkTests`: TTS clip generation, WER and latency per speech engine, faithfulness and latency per cleanup tier, silent-clip check
-- [ ] 5.2 Download both speech and both cleanup models on the developer's Mac; run the benchmark; record the numbers in design "Measured"
-- [ ] 5.3 Confirm or adjust the defaults from the numbers (Fast cleanup median < 0.5 s)
+- [x] 5.2 Download both speech and both cleanup models on the developer's Mac; run the benchmark; record the numbers in design "Measured"
+- [x] 5.3 Confirm or adjust the defaults from the numbers (Fast cleanup median < 0.5 s)
 
 ## 6. Licences and docs
 
@@ -36,7 +36,14 @@
 
 ## 7. Verification
 
-- [ ] 7.1 Clean build with no warnings; unit and integration tests pass
+- [x] 7.1 Clean build with no warnings; unit and integration tests pass
 - [ ] 7.2 Developer: dictate with Parakeet (short words, sentences, silence), then switch to Whisper large-v3-turbo and dictate in another language
 - [ ] 7.3 Developer: launch with the old Qwen 2.5 and small.en selections saved; they migrate, and the new models download on first use
 - [ ] 7.4 Developer: offline dictation with Parakeet (Wi-Fi off)
+
+## 8. Benchmark follow-ups
+
+- [x] 8.1 Short default prompt; speaker-label rule only when labels are present; unit-test prompt assembly
+- [x] 8.2 `removeUnambiguousFillers` on every final text (model, fallback, cleanup off)
+- [x] 8.3 Silence gate (100 ms-window RMS, −45 dBFS) before transcription; unit-test it with silence, noise floor and quiet speech
+- [x] 8.4 Benchmark scores filler removal; rerun the integration tests and benchmark; record the numbers in "Measured"

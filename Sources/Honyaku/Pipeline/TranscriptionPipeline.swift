@@ -91,6 +91,13 @@ final class TranscriptionPipeline {
     private let pasteboardClearDelay: Double = 5.0
 
     private func run(audioURL: URL, floatArray: [Float]) async throws {
+        // Silence never reaches the speech model — Whisper invents "Thank you." for it
+        if !floatArray.isEmpty, AudioCaptureService.isSilent(samples16k: floatArray) {
+            TranscriptionService.deleteTempFile(audioURL)
+            appState.status = .idle
+            return
+        }
+
         // Step 1: ASR (the service deletes audioURL on return; Parakeet reads the float samples directly)
         let modelID = appState.selectedSpeechModelID
         let result = try await transcription.transcribe(audioURL: audioURL, samples16k: floatArray, modelID: modelID)
@@ -131,6 +138,13 @@ final class TranscriptionPipeline {
                 // Timeout, model not loaded, or any other error — fall back to labeled text
                 finalText = labeledText
             }
+        }
+
+        // um/umm/uh/hmm are never content, whatever the model (or no model) left in
+        finalText = CleanupService.removeUnambiguousFillers(finalText)
+        guard !finalText.isEmpty else {
+            appState.status = .idle
+            return
         }
 
         // Step 4: Paste

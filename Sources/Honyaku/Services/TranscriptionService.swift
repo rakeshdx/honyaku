@@ -22,7 +22,7 @@ actor TranscriptionService: ASRService {
 
     /// `samples16k` is the same audio as 16 kHz mono floats, which Parakeet uses directly.
     func transcribe(audioURL: URL, samples16k: [Float]?, modelID: String) async throws -> TranscriptionResult {
-        defer { deleteTempFile(audioURL) }
+        defer { Self.deleteTempFile(audioURL) }
 
         let engine = try await loadEngine(modelID: modelID)
 
@@ -126,10 +126,18 @@ actor TranscriptionService: ASRService {
     /// ("openai_whisper-tiny.en" → "openai/whisper-tiny.en"), fetching it on first load if missing.
     static func isTokenizerDownloaded(variant: String,
                                       documents: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]) -> Bool {
-        guard variant.hasPrefix("openai_") else { return false }
-        let name = "openai/" + variant.dropFirst("openai_".count)
+        guard let name = tokenizerName(forVariant: variant) else { return false }
         let file = documents.appending(path: "huggingface/models").appending(path: name).appending(path: "tokenizer.json")
         return FileManager.default.fileExists(atPath: file.path)
+    }
+
+    /// The tokenizer repo WhisperKit uses for a variant: the base model name, without the size or build
+    /// suffix after "_" or a "-vYYYYMMDD" date stamp ("openai_whisper-large-v3-v20240930_626MB" → "openai/whisper-large-v3").
+    static func tokenizerName(forVariant variant: String) -> String? {
+        guard variant.hasPrefix("openai_") else { return nil }
+        let model = variant.dropFirst("openai_".count).split(separator: "_").first.map(String.init) ?? ""
+        let base = model.replacingOccurrences(of: #"-v\d{8}$"#, with: "", options: .regularExpression)
+        return base.isEmpty ? nil : "openai/" + base
     }
 
     /// True when every compiled model WhisperKit needs is complete; an interrupted download fails this.
@@ -179,7 +187,7 @@ actor TranscriptionService: ASRService {
         return collapsed
     }
 
-    private func deleteTempFile(_ url: URL) {
+    static func deleteTempFile(_ url: URL) {
         guard url.path.hasPrefix(NSTemporaryDirectory()),
               url.lastPathComponent.hasPrefix("honyaku_") else { return }
         try? FileManager.default.removeItem(at: url)
