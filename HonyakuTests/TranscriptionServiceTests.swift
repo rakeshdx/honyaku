@@ -1,27 +1,35 @@
 import XCTest
 @testable import Honyaku
+import WhisperKit
 
 final class TranscriptionDecodeOptionsTests: XCTestCase {
 
-    func testSubSecondClipGetsTrimJustUnderItsLength() throws {
+    func testSubSecondClipGetsTrimJustUnderItsLength() {
         // Default 1 s trim would skip this clip without decoding it
-        let trim = try XCTUnwrap(TranscriptionService.decodeOptions(forDurationSeconds: 0.5)?.windowClipTime)
-        XCTAssertEqual(trim, 0.4, accuracy: 0.001)
+        XCTAssertEqual(TranscriptionService.decodeOptions(forDurationSeconds: 0.5).windowClipTime, 0.4, accuracy: 0.001)
     }
 
-    func testVeryShortClipNeverGetsNegativeTrim() throws {
-        let trim = try XCTUnwrap(TranscriptionService.decodeOptions(forDurationSeconds: 0.05)?.windowClipTime)
-        XCTAssertEqual(trim, 0, accuracy: 0.001)
+    func testVeryShortClipNeverGetsNegativeTrim() {
+        XCTAssertEqual(TranscriptionService.decodeOptions(forDurationSeconds: 0.05).windowClipTime, 0, accuracy: 0.001)
     }
 
-    func testClipsFromOnePointOneSecondsKeepWhisperKitDefaults() {
-        XCTAssertNil(TranscriptionService.decodeOptions(forDurationSeconds: 1.1))
-        XCTAssertNil(TranscriptionService.decodeOptions(forDurationSeconds: 29.9))
-        XCTAssertNil(TranscriptionService.decodeOptions(forDurationSeconds: 45))
+    func testClipsFromOnePointOneSecondsKeepTheDefaultTrim() {
+        let defaultTrim = DecodingOptions().windowClipTime
+        for duration in [1.1, 29.9, 45] {
+            XCTAssertEqual(TranscriptionService.decodeOptions(forDurationSeconds: duration).windowClipTime, defaultTrim)
+        }
+        XCTAssertEqual(TranscriptionService.decodeOptions(forDurationSeconds: nil).windowClipTime, defaultTrim)
     }
 
-    func testUnknownDurationKeepsWhisperKitDefaults() {
-        XCTAssertNil(TranscriptionService.decodeOptions(forDurationSeconds: nil))
+    func testLanguageIsAlwaysDetected() {
+        // WhisperKit's default forces <|en|>, which makes the multilingual model translate into English
+        XCTAssertFalse(DecodingOptions().detectLanguage, "Precondition: WhisperKit's default doesn't detect")
+        for duration in [0.5, 3, nil] as [Double?] {
+            let options = TranscriptionService.decodeOptions(forDurationSeconds: duration)
+            XCTAssertTrue(options.detectLanguage)
+            XCTAssertNil(options.language)
+            XCTAssertEqual(options.task, .transcribe)
+        }
     }
 }
 

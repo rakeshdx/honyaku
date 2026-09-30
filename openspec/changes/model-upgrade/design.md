@@ -201,6 +201,8 @@ Measured on the developer's Mac (M3 Max, 36 GB, macOS 26.6.2) on 2026-09-30, wit
 | qwen3-1.7b | 8/8 | 4/4 | 1250 ms | 158 ms | 174 ms |
 | qwen3-4b-2507 | 8/8 | 4/4 | 1389 ms | 307 ms | 334 ms |
 
+**Multilingual:** with WhisperKit's default options, the multilingual model translated Japanese and Italian dictations into English, because the defaults start every decode with `<|en|>` (`detectLanguage` defaults to false while `usePrefillPrompt` is true). `decodeOptions` now always sets `detectLanguage: true`. The benchmark renders Italian and French clips with `say` and checks the output isn't translated: Italian came back exact ("Dov'è la stazione dei treni?"), and French came back in French, though with a mis-heard phrase from the synthetic voice.
+
 **Defaults confirmed:**
 - Parakeet for speech on every Mac: better accuracy than Whisper, and about 15× faster.
 - Qwen3-1.7B under 16 GB. Its 158 ms median meets the Fast-tier target of under 0.5 s.

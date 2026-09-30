@@ -58,10 +58,27 @@ final class ModelBenchmarkTests: IntegrationTestBase {
             XCTAssertTrue(AudioCaptureService.isSilent(samples16k: samples), "Silence gate missed a silent clip")
             let engineAlone = try await transcribe(silence, with: service, model: model)
             print("Silence, \(model.id) without the gate: \(engineAlone.isEmpty ? "(empty)" : "\"\(engineAlone)\"")")
+
+            // The multilingual model must write what was said, not an English translation
+            if model.tier == "multilingual" {
+                for (voice, text, word) in Self.foreignClips {
+                    let clip = try Self.renderSpeech(text, name: "foreign-\(word)", voice: voice)
+                    let heard = try await transcribe(clip, with: service, model: model)
+                    print("Foreign, \(model.id), \(voice): \(heard)")
+                    XCTAssertTrue(heard.lowercased().contains(word), "\(model.id) should transcribe, not translate: \(heard)")
+                }
+            }
         }
         try XCTSkipUnless(measuredAny, "No speech model is installed")
         print(report.joined(separator: "\n"))
     }
+
+    /// (voice, sentence, a word that only appears if it wasn't translated into English). The word is a
+    /// common one, so a mis-heard phrase elsewhere in the sentence doesn't fail the check.
+    private static let foreignClips = [
+        ("Alice", "Dov'è la stazione dei treni?", "stazione"),
+        ("Eddy (French (France))", "Je voudrais un café, s'il vous plaît.", "vous"),
+    ]
 
     // MARK: - Cleanup
 
@@ -135,11 +152,11 @@ final class ModelBenchmarkTests: IntegrationTestBase {
         return dir
     }()
 
-    /// Speaks `text` with the system voice into a 16 kHz mono WAV.
-    private static func renderSpeech(_ text: String, name: String) throws -> URL {
+    /// Speaks `text` with the system voice (or `voice`) into a 16 kHz mono WAV.
+    private static func renderSpeech(_ text: String, name: String, voice: String? = nil) throws -> URL {
         let aiff = workDir.appending(path: "\(name).aiff")
         let wav = workDir.appending(path: "\(name).wav")
-        try run("/usr/bin/say", ["-o", aiff.path, text])
+        try run("/usr/bin/say", (voice.map { ["-v", $0] } ?? []) + ["-o", aiff.path, text])
         try run("/usr/bin/afconvert", ["-f", "WAVE", "-d", "LEI16@16000", "-c", "1", aiff.path, wav.path])
         return wav
     }

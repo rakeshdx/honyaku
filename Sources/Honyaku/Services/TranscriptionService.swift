@@ -148,13 +148,21 @@ actor TranscriptionService: ASRService {
         }
     }
 
-    /// WhisperKit only decodes while more than `windowClipTime` (default 1 s) remains, so a clip of 1 s
-    /// or less is skipped entirely. The trim also stops a trailing sliver after the last timestamp being
-    /// decoded on its own (where Whisper invents "Thank you."), so it is only shrunk for clips too short to
-    /// decode at all, and kept just under the clip length so that sliver still can't be decoded alone.
-    static func decodeOptions(forDurationSeconds duration: Double?) -> DecodingOptions? {
-        guard let duration, duration < 1.1 else { return nil }
-        return DecodingOptions(windowClipTime: Float(max(0, duration - 0.1)))
+    /// Decoding options for a clip.
+    /// - Language: detection is always on. WhisperKit's defaults start every decode with `<|en|>`, which
+    ///   makes a multilingual model translate Japanese or Italian into English instead of transcribing it.
+    ///   English-only models skip detection themselves.
+    /// - End trim: WhisperKit only decodes while more than `windowClipTime` (default 1 s) remains, so a clip
+    ///   of 1 s or less would be skipped. The trim also stops a trailing sliver after the last timestamp
+    ///   being decoded alone (where Whisper invents "Thank you."), so it's only shrunk for clips too short
+    ///   to decode, to just under the clip length.
+    static func decodeOptions(forDurationSeconds duration: Double?) -> DecodingOptions {
+        var options = DecodingOptions()
+        options.detectLanguage = true
+        if let duration, duration < 1.1 {
+            options.windowClipTime = Float(max(0, duration - 0.1))
+        }
+        return options
     }
 
     /// Transcript text from WhisperKit's window text — which keeps the original spacing, so scripts without
