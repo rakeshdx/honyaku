@@ -6,6 +6,8 @@ import Observation
 final class AppState {
     var status: AppStatus = .idle
     var lastError: String?
+    /// Background model downloads in progress: model ID → 0…1.
+    var modelDownloads: [String: Double] = [:]
 
     // Feature toggles (backed by UserDefaults via AppStorage in views,
     // mirrored here for pipeline access).
@@ -19,11 +21,13 @@ final class AppState {
         didSet { UserDefaults.standard.set(diarizationEnabled, forKey: "diarizationEnabled") }
     }
 
-    // Selected model IDs
-    var selectedSpeechModelID: String = UserDefaults.standard.string(forKey: "selectedSpeechModelID") ?? "whisper-small-en" {
+    // Selected model IDs — retired models are migrated to their replacement on first read
+    var selectedSpeechModelID: String = AppState.resolvedSelection(
+        key: "selectedSpeechModelID", fallback: ModelRegistry.defaultSpeechModelID) {
         didSet { UserDefaults.standard.set(selectedSpeechModelID, forKey: "selectedSpeechModelID") }
     }
-    var selectedCleanupModelID: String = UserDefaults.standard.string(forKey: "selectedCleanupModelID") ?? "qwen-0.8b" {
+    var selectedCleanupModelID: String = AppState.resolvedSelection(
+        key: "selectedCleanupModelID", fallback: ModelRegistry.defaultCleanupModelID) {
         didSet { UserDefaults.standard.set(selectedCleanupModelID, forKey: "selectedCleanupModelID") }
     }
 
@@ -31,6 +35,23 @@ final class AppState {
     var setupComplete: Bool = UserDefaults.standard.bool(forKey: "setupComplete") {
         didSet { UserDefaults.standard.set(setupComplete, forKey: "setupComplete") }
     }
+
+    /// Reads a saved model selection, migrating a retired ID and writing the result back so services
+    /// that read UserDefaults directly (CleanupService) see the same model.
+    nonisolated static func resolvedSelection(key: String, fallback: String,
+                                              defaults: UserDefaults = .standard) -> String {
+        let saved = defaults.string(forKey: key)
+        let resolved = ModelRegistry.resolvedID(saved, fallback: fallback)
+        if saved != nil, saved != resolved {
+            defaults.set(resolved, forKey: key)
+            migratedSelectionKeys.insert(key)
+        }
+        return resolved
+    }
+
+    /// Selections migrated from a retired model this launch, so the pipeline can fetch the new models
+    /// straight away. A static because property initialisers can't reach the instance.
+    nonisolated(unsafe) static var migratedSelectionKeys: Set<String> = []
 
     func setError(_ message: String) {
         status = .error(message)

@@ -4,12 +4,13 @@ import Foundation
 
 protocol ASRService: Sendable {
     func transcribe(audioURL: URL, modelID: String) async throws -> TranscriptionResult
+    func transcribe(audioURL: URL, samples16k: [Float]?, modelID: String) async throws -> TranscriptionResult
 }
 
 // MARK: - Cleanup
 
 protocol CleanupServiceProtocol: Sendable {
-    func clean(_ rawText: String, prompt: String) async throws -> String
+    func clean(_ rawText: String, prompt: String, englishFillers: Bool) async throws -> String
 }
 
 // MARK: - Diarization

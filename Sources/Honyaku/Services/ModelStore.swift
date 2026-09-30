@@ -20,19 +20,17 @@ final class ModelStore {
         try mutableURL.setResourceValues(rv)
     }
 
+    var baseDirectory: URL { baseURL }
+
     func modelDirectory(for model: ModelInfo) -> URL {
         baseURL.appendingPathComponent("\(model.type.rawValue)/\(model.id)", isDirectory: true)
     }
 
     func isDownloaded(_ model: ModelInfo) -> Bool {
         let dir = modelDirectory(for: model)
+        // Registry models list no files; each engine decides what a complete install looks like
         if model.fileNames.isEmpty {
-            // MLX cleanup models: config.json marks a complete download
-            if model.type == .cleanup {
-                return FileManager.default.fileExists(atPath: dir.appendingPathComponent("config.json").path)
-            }
-            // Speech/diarization models with no fileNames are managed externally (WhisperKit/SpeakerKit)
-            return true
+            return ModelInstaller.isInstalled(model)
         }
         return model.fileNames.allSatisfy { fileName in
             let stripped = (fileName as NSString).deletingPathExtension  // handle .zip

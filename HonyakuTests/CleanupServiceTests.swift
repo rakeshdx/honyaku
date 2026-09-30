@@ -57,6 +57,15 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertTrue(CleanupService.defaultPrompt.contains("Transcript: are you, like, coming tomorrow or not"))
     }
 
+    func testUmIsContentOutsideEnglish() {
+        // German "um 5 Uhr" (at five) and Portuguese "um carro" (a car)
+        XCTAssertFalse(CleanupService.isFaithful(raw: "Ich komme um 5 Uhr", cleaned: "Ich komme 5 Uhr.", englishFillers: false))
+        XCTAssertTrue(CleanupService.isFaithful(raw: "Ich komme um 5 Uhr", cleaned: "Ich komme um 5 Uhr.", englishFillers: false))
+        XCTAssertFalse(CleanupService.isFaithful(raw: "Comprei um carro", cleaned: "Comprei carro.", englishFillers: false))
+        // English still treats it as a filler
+        XCTAssertTrue(CleanupService.isFaithful(raw: "um I think so", cleaned: "I think so.", englishFillers: true))
+    }
+
     // MARK: isFaithful — tokenisation
 
     func testPunctuationAndCaseChangesAreAccepted() {
@@ -98,5 +107,30 @@ final class CleanupServiceTests: XCTestCase {
     func testWrappingQuotesRemovedButDictatedQuotesKept() {
         XCTAssertEqual(CleanupService.stripDelimiters("\"Hello.\""), "Hello.")
         XCTAssertEqual(CleanupService.stripDelimiters("\"Hi,\" she said \"bye.\""), "\"Hi,\" she said \"bye.\"")
+    }
+
+    // MARK: Latency guards
+
+    func testOutputCapScalesWithInputAndIsBounded() {
+        XCTAssertGreaterThan(CleanupService.outputTokenLimit(for: "send it"), 32)
+        XCTAssertLessThan(CleanupService.outputTokenLimit(for: "send it"), 64)
+        XCTAssertEqual(CleanupService.outputTokenLimit(for: String(repeating: "word ", count: 2_000)), 512)
+    }
+
+    func testReasoningIsNeverPasted() {
+        XCTAssertEqual(CleanupService.stripDelimiters("<think>\nThe user said…\n</think>\n\nSend it."), "Send it.")
+    }
+}
+
+final class CleanupPromptAssemblyTests: XCTestCase {
+    func testLabelRuleOnlyWhenLabelsPresent() {
+        XCTAssertFalse(CleanupService.prompt(CleanupService.defaultPrompt, for: "send it today")
+            .contains(CleanupService.speakerLabelRule))
+        XCTAssertTrue(CleanupService.prompt(CleanupService.defaultPrompt, for: "[Speaker 1] hi [Speaker 2] hello")
+            .hasSuffix(CleanupService.speakerLabelRule))
+    }
+
+    func testDefaultPromptHasNoLabelRule() {
+        XCTAssertFalse(CleanupService.defaultPrompt.contains("[Speaker"))
     }
 }

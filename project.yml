@@ -14,6 +14,13 @@ packages:
   mlx-swift-lm:
     url: https://github.com/ml-explore/mlx-swift-lm
     from: "2.30.0"
+  FluidAudio:
+    url: https://github.com/FluidInference/FluidAudio
+    from: "0.17.4"
+  # Declared only so CleanupService can build LMInput token arrays; pinned to what mlx-swift-lm resolves
+  mlx-swift:
+    url: https://github.com/ml-explore/mlx-swift
+    minorVersion: "0.30.6"
 
 targets:
   Honyaku:
@@ -22,8 +29,11 @@ targets:
     deploymentTarget: "14.0"
     sources:
       - path: Sources/Honyaku
-    resources:
-      - Sources/Resources/PrivacyInfo.xcprivacy
+      # XcodeGen has no target-level `resources:` key, so these must be sources with a resources phase
+      - path: Sources/Resources/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      - path: Sources/Resources/ThirdPartyNotices.md
+        buildPhase: resources
     # Debug signing comes from the xcconfig (optionally overridden by git-ignored Config/Local.xcconfig)
     configFiles:
       Debug: Config/Debug.xcconfig
@@ -51,6 +61,10 @@ targets:
         product: MLXLLM
       - package: mlx-swift-lm
         product: MLXLMCommon
+      - package: FluidAudio
+        product: FluidAudio
+      - package: mlx-swift
+        product: MLX
 
   HonyakuTests:
     type: bundle.unit-test
@@ -91,6 +105,8 @@ targets:
       - target: Honyaku
       - package: WhisperKit
         product: WhisperKit
+      - package: FluidAudio
+        product: FluidAudio
 
   HonyakuUITests:
     type: bundle.ui-testing

@@ -1,5 +1,4 @@
 import SwiftUI
-import WhisperKit
 
 struct SetupWizardView: View {
     @Environment(AppState.self) private var appState
@@ -129,27 +128,21 @@ struct SetupWizardView: View {
         let cleanupID = selectedCleanupID
         let diarizationOn = enableDiarization
         Task.detached(priority: .utility) {
-            let downloader = ModelDownloader()
+            let installer = ModelInstaller.shared
             do {
-                // Speech model via WhisperKit
+                // Speech model first (first half of the bar), then the cleanup model
                 let speechModel = ModelRegistry.model(id: speechID)!
-                if let variant = speechModel.whisperVariant {
-                    let hfToken = KeychainService.load(key: KeychainService.hfTokenKey)
-                    _ = try await WhisperKit.download(
-                        variant: variant,
-                        from: speechModel.hfRepoPath,
-                        token: hfToken
-                    ) { progress in
-                        Task { @MainActor in downloadProgress = progress.fractionCompleted * 0.5 }
+                if !ModelInstaller.isInstalled(speechModel) {
+                    try await installer.install(speechModel) { p in
+                        Task { @MainActor in downloadProgress = p * 0.5 }
                     }
                 }
 
-                // Cleanup model (GGUF) — skip if already on disk
                 let cleanupModel = ModelRegistry.model(id: cleanupID)!
-                if downloader.isDownloaded(cleanupModel) {
+                if ModelInstaller.isInstalled(cleanupModel) {
                     Task { @MainActor in downloadProgress = 1.0 }
                 } else {
-                    try await downloader.download(model: cleanupModel) { p in
+                    try await installer.install(cleanupModel) { p in
                         Task { @MainActor in downloadProgress = 0.5 + p * 0.5 }
                     }
                 }

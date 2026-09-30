@@ -10,6 +10,7 @@ struct MenuBarPopoverView: View {
         VStack(spacing: 0) {
             // Status header
             statusHeader
+            downloadLines
             Divider()
 
             // Transcript history list
@@ -59,6 +60,20 @@ struct MenuBarPopoverView: View {
     }
 
     // MARK: - Subviews
+
+    /// Background model downloads (ui-redesign restyles this on rebase).
+    @ViewBuilder private var downloadLines: some View {
+        ForEach(appState.modelDownloads.sorted { $0.key < $1.key }, id: \.key) { id, fraction in
+            HStack(spacing: 8) {
+                ProgressView(value: fraction).frame(width: 60)
+                Text("Downloading \(ModelRegistry.model(id: id)?.displayName ?? id), \(Int((fraction * 100).rounded()))%")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+        }
+    }
 
     private var statusHeader: some View {
         HStack(spacing: 8) {

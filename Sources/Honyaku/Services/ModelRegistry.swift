@@ -8,40 +8,29 @@ enum ModelRegistry {
 
     static let speechModels: [ModelInfo] = [
         ModelInfo(
-            id: "whisper-tiny-en",
+            id: "parakeet-tdt-v2",
             type: .speech,
-            displayName: "Whisper Tiny (English)",
-            hfRepoPath: "argmaxinc/whisperkit-coreml",
-            fileNames: [],
-            sizeMB: 75,
-            tier: "fast",
-            notes: "Fastest, English only",
-            sha256Checksums: [:],
-            whisperVariant: "openai_whisper-tiny.en"
+            engine: .parakeet,
+            displayName: "Parakeet (English)",
+            hfRepoPath: "FluidInference/parakeet-tdt-0.6b-v2-coreml",
+            fileNames: [],  // FluidAudio fetches the Core ML bundles and vocabulary itself
+            sizeMB: 464,
+            tier: "recommended",
+            notes: "Most accurate and fastest for English, adds punctuation",
+            sha256Checksums: [:]
         ),
         ModelInfo(
-            id: "whisper-small-en",
+            id: "whisper-large-v3-turbo",
             type: .speech,
-            displayName: "Whisper Small (English)",
+            engine: .whisperKit,
+            displayName: "Whisper Large v3 Turbo (Multilingual)",
             hfRepoPath: "argmaxinc/whisperkit-coreml",
             fileNames: [],
-            sizeMB: 466,
-            tier: "balanced",
-            notes: "Best accuracy/speed balance, English only — default",
-            sha256Checksums: [:],
-            whisperVariant: "openai_whisper-small.en"
-        ),
-        ModelInfo(
-            id: "whisper-small-multilingual",
-            type: .speech,
-            displayName: "Whisper Small (Multilingual)",
-            hfRepoPath: "argmaxinc/whisperkit-coreml",
-            fileNames: [],
-            sizeMB: 466,
+            sizeMB: 627,
             tier: "multilingual",
             notes: "99 languages",
             sha256Checksums: [:],
-            whisperVariant: "openai_whisper-small"
+            whisperVariant: "openai_whisper-large-v3-v20240930_626MB"
         ),
     ]
 
@@ -50,36 +39,28 @@ enum ModelRegistry {
 
     static let cleanupModels: [ModelInfo] = [
         ModelInfo(
-            id: "qwen-1.5b-mlx",
+            id: "qwen3-1.7b",
             type: .cleanup,
-            displayName: "Qwen 2.5 1.5B (Fast)",
-            hfRepoPath: "mlx-community/Qwen2.5-1.5B-Instruct-4bit",
+            engine: .mlx,
+            displayName: "Qwen3 1.7B (Faster)",
+            hfRepoPath: "mlx-community/Qwen3-1.7B-4bit",
             fileNames: [],
-            sizeMB: 950,
+            sizeMB: 968,
             tier: "fast",
-            notes: "~2–3s on M1 — default",
-            sha256Checksums: [:]
+            notes: "Faster, lighter on memory",
+            sha256Checksums: [:],
+            disablesThinking: true
         ),
         ModelInfo(
-            id: "qwen-3b-mlx",
+            id: "qwen3-4b-2507",
             type: .cleanup,
-            displayName: "Qwen 2.5 3B (Balanced)",
-            hfRepoPath: "mlx-community/Qwen2.5-3B-Instruct-4bit",
+            engine: .mlx,
+            displayName: "Qwen3 4B (More accurate)",
+            hfRepoPath: "mlx-community/Qwen3-4B-Instruct-2507-4bit",
             fileNames: [],
-            sizeMB: 1900,
-            tier: "balanced",
-            notes: "~5–6s on M1",
-            sha256Checksums: [:]
-        ),
-        ModelInfo(
-            id: "qwen-7b-mlx",
-            type: .cleanup,
-            displayName: "Qwen 2.5 7B (Best)",
-            hfRepoPath: "mlx-community/Qwen2.5-7B-Instruct-4bit",
-            fileNames: [],
-            sizeMB: 4300,
+            sizeMB: 2260,
             tier: "best",
-            notes: "~10–15s on M1, most accurate",
+            notes: "More accurate, needs 16 GB of memory",
             sha256Checksums: [:]
         ),
     ]
@@ -90,6 +71,7 @@ enum ModelRegistry {
         ModelInfo(
             id: "speakerkit-coreml",
             type: .diarization,
+            engine: .speakerKit,
             displayName: "SpeakerKit CoreML",
             hfRepoPath: "argmaxinc/speakerkit-coreml",
             fileNames: [],  // SpeakerKit manages its own download via PyannoteConfig
@@ -106,7 +88,40 @@ enum ModelRegistry {
         (speechModels + cleanupModels + diarizationModels).first { $0.id == id }
     }
 
-    static let defaultSpeechModelID = "whisper-small-en"
-    static let defaultCleanupModelID = "qwen-1.5b-mlx"
+    /// Default models for a Mac with this much physical memory (bytes).
+    static func recommended(forPhysicalMemory bytes: UInt64) -> (speech: String, cleanup: String) {
+        // A "16 GB" Mac reports exactly 16 GiB; the margin keeps rounding from pushing it below
+        let sixteenGB: UInt64 = 16 * 1024 * 1024 * 1024
+        let cleanup = bytes >= sixteenGB - 512 * 1024 * 1024 ? "qwen3-4b-2507" : "qwen3-1.7b"
+        return ("parakeet-tdt-v2", cleanup)
+    }
+
+    /// The model that replaces a retired one, so saved selections survive the lineup change. A cleanup
+    /// replacement is never larger than the recommendation for the Mac's memory (8 GB Macs get the 1.7B).
+    static func migratedID(_ id: String,
+                           physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> String? {
+        switch id {
+        case "whisper-tiny-en", "whisper-small-en":            return "parakeet-tdt-v2"
+        case "whisper-small-multilingual":                     return "whisper-large-v3-turbo"
+        case "qwen-1.5b-mlx":                                  return "qwen3-1.7b"
+        case "qwen-3b-mlx", "qwen-7b-mlx", "qwen-0.8b":        return recommended(forPhysicalMemory: physicalMemory).cleanup
+        default:                                               return nil
+        }
+    }
+
+    /// A saved selection resolved to a current model: retired IDs are migrated, unknown ones fall back.
+    static func resolvedID(_ saved: String?, fallback: String,
+                           physicalMemory: UInt64 = ProcessInfo.processInfo.physicalMemory) -> String {
+        guard let saved else { return fallback }
+        if model(id: saved) != nil { return saved }
+        return migratedID(saved, physicalMemory: physicalMemory) ?? fallback
+    }
+
+    static var defaultSpeechModelID: String {
+        recommended(forPhysicalMemory: ProcessInfo.processInfo.physicalMemory).speech
+    }
+    static var defaultCleanupModelID: String {
+        recommended(forPhysicalMemory: ProcessInfo.processInfo.physicalMemory).cleanup
+    }
     static let defaultDiarizationModelID = "speakerkit-coreml"
 }

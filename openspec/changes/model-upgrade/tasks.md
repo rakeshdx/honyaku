@@ -1,0 +1,71 @@
+## 1. Engine plumbing
+
+- [x] 1.1 Add FluidAudio (`from: 0.17.4`) to `project.yml` for the Honyaku and integration-test targets; regenerate; clean build
+- [x] 1.2 `ModelEngine` and `ModelInfo.engine` (plus `disablesThinking` for cleanup models; see Implementation notes); update registry consumers
+- [x] 1.3 `SpeechEngine` protocol; move the Whisper path into `WhisperKitEngine` with no behaviour change; `TranscriptionService` dispatches by engine; existing tests pass
+- [x] 1.4 `ParakeetEngine`: offline `loadLocal`, pad to 4,800 samples, silence → empty, word timings → `TimedSegment`s; unit-test padding, segment grouping and the silence rule
+
+## 2. ModelInstaller
+
+- [x] 2.1 `ModelInstaller` actor with `state`, `install` and `delete` per engine; completeness checks (Parakeet bundle files, MLX safetensors from the index)
+- [x] 2.2 Load once after install, so the Neural Engine compile happens at download time
+- [x] 2.3 `ModelStore.isDownloaded` delegates to `ModelInstaller`; `SetupWizardView` and `SettingsView` call `ModelInstaller.install`
+- [x] 2.4 Unit tests: completeness checks against temporary folders (complete, missing weights, `.partial` left over)
+
+## 3. Registry, migration, recommendation
+
+- [x] 3.1 New registry entries (design Decision 2); remove the old ones; defaults from `recommended(forPhysicalMemory:)`
+- [x] 3.2 `migratedID(_:)` applied in `AppState`'s initialisers (HonyakuApp.init runs too late); fix `AppState`'s fallback IDs
+- [x] 3.3 Unit tests: migration mapping, recommendation at 8 and 36 GB
+
+## 4. Cleanup latency
+
+- [x] 4.1 `maxTokens` cap; `enable_thinking: false` through `additionalContext` for Qwen3-1.7B
+- [x] 4.2 System-prompt reuse per (model, prompt), with the history reset each call, or the fallbacks in design Decision 5
+- [x] 4.3 Cleanup integration tests pass on both new tiers (faithfulness on the model's own output)
+
+## 5. Benchmark and defaults
+
+- [x] 5.1 `ModelBenchmarkTests`: TTS clip generation, WER and latency per speech engine, faithfulness and latency per cleanup tier, silent-clip check
+- [x] 5.2 Download both speech and both cleanup models on the developer's Mac; run the benchmark; record the numbers in design "Measured"
+- [x] 5.3 Confirm or adjust the defaults from the numbers (Fast cleanup median < 0.5 s)
+
+## 6. Licences and docs
+
+- [x] 6.1 `ThirdPartyNotices.md` bundled; README "Models" and credits sections updated
+
+## 7. Verification
+
+- [x] 7.1 Clean build with no warnings; unit and integration tests pass
+- [x] 7.2 Developer: dictate with Parakeet (short words, sentences, silence), then switch to Whisper large-v3-turbo and dictate in another language
+- [x] 7.3 Developer: launch with the old Qwen 2.5 and small.en selections saved; they migrate, and the new models download on first use
+- [x] 7.4 Developer: offline dictation with Parakeet (Wi-Fi off)
+
+## 8. Benchmark follow-ups
+
+- [x] 8.1 Short default prompt; speaker-label rule only when labels are present; unit-test prompt assembly
+- [x] 8.2 `removeUnambiguousFillers` on every final text (model, fallback, cleanup off)
+- [x] 8.3 Silence gate (100 ms-window RMS, −45 dBFS) before transcription; unit-test it with silence, noise floor and quiet speech
+- [x] 8.4 Benchmark scores filler removal; rerun the integration tests and benchmark; record the numbers in "Measured"
+
+## 9. Manual-test follow-ups
+
+- [x] 9.1 Dictation reads the saved speech model each time, so switching in Settings applies without relaunch
+- [x] 9.2 `dictationLanguage` setting: `decodeOptions(forDurationSeconds:language:)`, `WhisperKitEngine` reads it per dictation; unit tests (chosen language disables detection; nil detects)
+- [x] 9.3 Settings picker: Auto-detect plus languages by name, disabled with a caption for English-only models
+- [x] 9.4 Benchmark: the Italian clip with the language set to Italian; developer check with short Italian and Japanese phrases
+
+## 10. Third review fixes
+
+- [x] 10.1 English-only fillers: language threaded through pipeline, `clean`, `isFaithful`, fallback; tests for German/Portuguese "um"
+- [x] 10.2 Bundle `ThirdPartyNotices.md` and `PrivacyInfo.xcprivacy` (`buildPhase: resources`); verify both in the built app
+- [x] 10.3 Single-flight `ModelInstaller.install` with a unit test
+- [x] 10.4 Parakeet re-fetch on local load failure when fetching is allowed
+- [x] 10.5 Migrated models download in the background at launch; `AppState.modelDownloads`; dictation returns straight away while the speech model downloads; cleanup skipped while its model downloads; popover status line
+- [x] 10.6 README: old-model deletion wording; Features line
+- [x] 10.7 Benchmark saves and restores `dictationLanguage`
+- [x] 10.8 Migration capped by memory; tests
+- [x] 10.9 `delete` guards; tests
+- [x] 10.10 Parakeet segments stripped; `isMLXComplete` requires `tokenizer.json`; cleanup timeout invalidates the prompt cache
+- [x] 10.11 Stale comments and docs; `ThirdPartyNotices` additions; `ModelRegistryTests` removes its defaults suite
+- [x] 10.12 Gates: clean build with no warnings, unit tests, cleanup integration tests and benchmark pass
