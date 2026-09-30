@@ -68,3 +68,23 @@ Before transcribing, the system SHALL measure the recording's loudness. If no 10
 #### Scenario: Quiet speech
 - **WHEN** the user speaks quietly but audibly
 - **THEN** the recording is transcribed as usual
+
+---
+
+### Requirement: Dictation language can be set for the multilingual model
+Settings SHALL offer a dictation language for the multilingual speech model: "Auto-detect" (the default), or any language the model supports, listed by name. With a language chosen, the system SHALL tell the model that language, and SHALL NOT detect or translate, so short phrases aren't mistaken for another language. With Auto-detect, the model detects the language for each dictation and transcribes it in that language. The setting SHALL NOT affect English-only models, and Settings SHALL say so while an English-only model is selected. It SHALL apply to the next dictation, without relaunching.
+
+#### Scenario: Italian chosen
+- **GIVEN** the multilingual model is selected and the dictation language is Italian
+- **WHEN** the user says "Dov'è la stazione?"
+- **THEN** "Dov'è la stazione?" is pasted in Italian, not an English translation
+
+#### Scenario: Auto-detect
+- **GIVEN** the dictation language is Auto-detect
+- **WHEN** the user dictates a Japanese sentence
+- **THEN** it is transcribed in Japanese
+
+#### Scenario: English-only model selected
+- **GIVEN** Parakeet is selected
+- **WHEN** the user opens the dictation language setting
+- **THEN** Settings explains that the setting applies to the multilingual model only, and Parakeet keeps transcribing English

@@ -47,3 +47,10 @@
 - [x] 8.2 `removeUnambiguousFillers` on every final text (model, fallback, cleanup off)
 - [x] 8.3 Silence gate (100 ms-window RMS, −45 dBFS) before transcription; unit-test it with silence, noise floor and quiet speech
 - [x] 8.4 Benchmark scores filler removal; rerun the integration tests and benchmark; record the numbers in "Measured"
+
+## 9. Manual-test follow-ups
+
+- [x] 9.1 Dictation reads the saved speech model each time, so switching in Settings applies without relaunch
+- [ ] 9.2 `dictationLanguage` setting: `decodeOptions(forDurationSeconds:language:)`, `WhisperKitEngine` reads it per dictation; unit tests (chosen language disables detection; nil detects)
+- [ ] 9.3 Settings picker: Auto-detect plus languages by name, disabled with a caption for English-only models
+- [ ] 9.4 Benchmark: the Italian clip with the language set to Italian; developer check with short Italian and Japanese phrases

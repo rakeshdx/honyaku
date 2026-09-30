@@ -99,7 +99,8 @@ final class TranscriptionPipeline {
         }
 
         // Step 1: ASR (the service deletes audioURL on return; Parakeet reads the float samples directly)
-        let modelID = appState.selectedSpeechModelID
+        // Read the saved choice each time, as cleanup does, so switching models in Settings applies at once
+        let modelID = UserDefaults.standard.string(forKey: "selectedSpeechModelID") ?? appState.selectedSpeechModelID
         let result = try await transcription.transcribe(audioURL: audioURL, samples16k: floatArray, modelID: modelID)
 
         // Empty / silence → discard

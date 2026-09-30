@@ -174,6 +174,14 @@ Changes made as a result:
 - The benchmark scores filler removal alongside faithfulness.
 - **Silence gate:** Whisper large-v3-turbo returned "Thank you." for a silent clip. The pipeline now computes a 100 ms-window RMS over the 16 kHz samples, and skips transcription when no window exceeds −45 dBFS. Parakeet already returned empty text for silence; the gate covers every engine.
 
+### 10. Dictation language
+
+On short clips, Whisper's per-dictation language detection is unreliable. In testing, an Italian phrase was taken as English and translated, and another came out as Russian.
+- **Storage:** a new `dictationLanguage` setting in `UserDefaults`. It's either `nil` (Auto-detect) or a Whisper language code. `WhisperKit.Constants.languages` supplies the name-to-code table of about 99 languages, shown sorted by name.
+- **How it's applied:** `decodeOptions(forDurationSeconds:language:)` sets `language = code, detectLanguage = false` when a language is chosen, or `detectLanguage = true` otherwise. `task` is always `.transcribe`. `WhisperKitEngine` reads the setting per dictation.
+- **Parakeet** ignores it.
+- **UI on this branch:** a `Picker` in the existing Settings Models section, disabled with an explanatory caption when the selected speech model is English-only. `ui-redesign` moves it into its Dictation tab when it rebases (its task 6.5).
+
 ## Risks / Trade-offs
 
 - **[Risk] Parakeet and Whisper both compile for the Neural Engine at first load (seconds to minutes).** → Compile at install time (Decision 4). Launch warm-up loads a compiled model.
