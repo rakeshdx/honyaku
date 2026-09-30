@@ -165,6 +165,14 @@ The fix: the Settings views and first run bind to `AppState` (`@Bindable`) inste
 - **Order of steps:** the Models step sets `setupComplete` after downloading, so the pipeline and Control listener start before the Try it step. This goes through the label's `onChange(of: setupComplete)`, because the popover's handler only runs while it's open.
 - **Test data:** `TranscriptStore(inMemory:)` gives a store that never reads or writes `history.json`, used by the new tests and the design renders.
 
+### 10. After rebasing onto `model-upgrade` (task 6.5)
+
+- **Downloads:** first run and the Settings Models tab install through `ModelInstaller`: one install per model at a time, a completeness check for every engine, and a compile at install time. Rows show the real size on disk for every model type, "Resume download" for an interrupted download, and Delete for any installed model that isn't in use.
+- **Recommendation:** first run preselects `ModelRegistry.recommended(forPhysicalMemory:)`.
+- **Language:** the Dictation tab has the Language picker (Auto-detect or a Whisper language), disabled with an explanation when the selected speech model is English-only.
+- **Download progress:** background model downloads (`AppState.modelDownloads`, for example after a migration) show under the popover header as one caption line each, with a slim progress bar in the `ai` tint.
+- **Older models:** `OlderModelsSection` lists only the known retired folders (Qwen 2.5, Whisper tiny.en, small.en and small), with size, and moves them to the Trash.
+
 ## Risks / Trade-offs
 
 - **[Risk] `NSPanel` over a full-screen app, or in Stage Manager.** → `fullScreenAuxiliary` plus `canJoinAllSpaces`. Verify by hand in a full-screen app.

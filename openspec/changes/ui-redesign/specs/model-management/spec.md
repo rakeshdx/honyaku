@@ -23,3 +23,17 @@ Changes in Settings to the active speech model, the active cleanup model, cleanu
 #### Scenario: User turns cleanup off
 - **WHEN** the user turns cleanup off in Settings and then dictates
 - **THEN** the raw transcript is pasted without cleanup
+
+---
+
+### Requirement: Files from retired models can be removed
+The Settings Models tab SHALL list model files left by earlier versions of Honyaku that the current registry no longer offers (the Whisper tiny.en, small.en and small models, and the Qwen 2.5 models), with their size on disk and a "Move to Trash" button. Only these known folders SHALL be listed. Files SHALL go to the Trash, not be deleted outright, so a mistake can be undone.
+
+#### Scenario: Old Qwen 2.5 files are present
+- **GIVEN** `qwen-3b-mlx` from an earlier version is still in the cleanup models folder
+- **WHEN** the user opens Settings > Models
+- **THEN** "Qwen 2.5 3B" is listed under "Older models" with its size, and "Move to Trash" moves the folder to the Trash
+
+#### Scenario: Nothing retired on disk
+- **WHEN** no retired model folders exist
+- **THEN** the "Older models" section isn't shown

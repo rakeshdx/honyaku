@@ -36,4 +36,5 @@
 - [ ] 6.3 Developer: dictate into three apps and watch the capsule (levels, "Transcribing…", fade, never steals focus); full-screen app; Reduce Motion on
 - [ ] 6.7 Developer: click Settings twice with it open (and press ⌘,); only one Settings window, brought to front; the same for the first-run window
 - [ ] 6.4 Developer: fresh first run end to end (reset `setupComplete`), including the live test
-- [ ] 6.5 Rebase onto `model-upgrade` once it merges: swap in `ModelInstaller` and `ModelRegistry.recommended(forPhysicalMemory:)`
+- [x] 6.5 Rebase onto `model-upgrade` once it merges: swap in `ModelInstaller` and `ModelRegistry.recommended(forPhysicalMemory:)`; Language picker in the Dictation tab; download progress in the popover; "Older models" with Move to Trash (design Decision 10)
+- [x] 6.8 Unit-test `RetiredModelFiles.onDisk` against a temporary folder (known folders only; missing ones skipped)

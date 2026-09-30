@@ -240,9 +240,11 @@ enum RetiredModelFiles {
     struct Item { let name: String; let url: URL; let bytes: Int64 }
 
     /// Known folders only (never a scan), so nothing but retired model files can be listed.
-    static func onDisk(fileManager: FileManager = .default) -> [Item] {
-        let cleanup = ModelStore.shared.baseDirectory.appending(path: "cleanup")
-        let whisper = TranscriptionService.localModelFolder(repo: "argmaxinc/whisperkit-coreml", variant: "")
+    static func onDisk(
+        cleanup: URL = ModelStore.shared.baseDirectory.appending(path: "cleanup"),
+        whisper: URL = TranscriptionService.localModelFolder(repo: "argmaxinc/whisperkit-coreml", variant: ""),
+        fileManager: FileManager = .default
+    ) -> [Item] {
         let candidates: [(String, URL)] = [
             ("Qwen 2.5 1.5B", cleanup.appending(path: "qwen-1.5b-mlx")),
             ("Qwen 2.5 3B", cleanup.appending(path: "qwen-3b-mlx")),
