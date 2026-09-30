@@ -1,4 +1,14 @@
-import Foundation
+import AppKit
+
+/// Where a finished dictation's text goes.
+enum DictationDestination: Equatable {
+    case paste
+    /// Honyaku itself is in front: ⌘V would paste into its own window
+    case saveOnly
+    case firstRunTest
+    /// Started in a first-run test that has since ended: never pasted, never saved
+    case discard
+}
 
 /// Orchestrates: AudioCapture → WhisperKit → SpeakerKit → CleanupLLM → PasteService
 @MainActor
@@ -17,6 +27,9 @@ final class TranscriptionPipeline {
         self.transcriptStore = transcriptStore
         downloads = ModelDownloads(appState: appState)
         audioCapture.prepare()
+        audioCapture.onLevel = { [weak appState] level in
+            MainActor.assumeIsolated { appState?.inputLevel = level }
+        }
         audioCapture.onDeviceDisconnected = { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -31,7 +44,7 @@ final class TranscriptionPipeline {
                 default:
                     break
                 }
-                self.appState.setError("Microphone disconnected — switched to system default.")
+                self.appState.setError("Microphone disconnected. Honyaku switched to the system default microphone.")
             }
         }
     }
@@ -54,7 +67,24 @@ final class TranscriptionPipeline {
         }
     }
 
+    // MARK: - Routing
+
+    static let savedWhileInFrontMessage = "Saved to History — Honyaku was in front"
+
+    /// `recordedInTest` is the first-run test running when the recording started; `currentTest` is the
+    /// one running now. A test result only reaches the window if that same test is still on screen.
+    nonisolated static func destination(recordedInTest: Int?, currentTest: Int?,
+                                        honyakuIsFrontmost: Bool) -> DictationDestination {
+        if let recordedInTest {
+            return recordedInTest == currentTest ? .firstRunTest : .discard
+        }
+        return honyakuIsFrontmost ? .saveOnly : .paste
+    }
+
     // MARK: - Recording lifecycle
+
+    /// The first-run test that was running when the current recording started, if any.
+    private var recordingTestSession: Int?
 
     func startRecording() {
         guard !appState.status.isBusy else { return }
@@ -62,24 +92,29 @@ final class TranscriptionPipeline {
         appState.clearError()
         do {
             try audioCapture.startCapture()
+            recordingTestSession = appState.firstRunTestSession
+            appState.inputLevel = 0
+            appState.recordingStartedAt = Date()
             appState.status = .recording
         } catch {
-            appState.setError("Could not start microphone: \(error.localizedDescription)")
+            appState.setError("Couldn't start the microphone: \(error.localizedDescription) Check it's connected, or choose another in Settings > General.")
         }
     }
 
     func stopRecordingAndProcess() {
         guard appState.status == .recording else { return }
         appState.status = .transcribing
+        appState.inputLevel = 0
+        let testSession = recordingTestSession
 
         Task {
             do {
                 let (audioURL, floatArray) = try audioCapture.stopCaptureAndFlushBoth()
-                try await run(audioURL: audioURL, floatArray: floatArray)
+                try await run(audioURL: audioURL, floatArray: floatArray, testSession: testSession)
             } catch AudioCaptureError.noMicrophonePermission {
-                appState.setError("Microphone permission required.")
+                appState.setError("Honyaku needs microphone access. Turn it on in System Settings → Privacy & Security → Microphone.")
             } catch {
-                appState.setError(error.localizedDescription)
+                appState.setError("The dictation didn't finish: \(error.localizedDescription) Try again.")
                 await paste.clearTranscriptFromPasteboard(after: pasteboardClearDelay)
             }
             if case .error = appState.status {} else {
@@ -92,6 +127,7 @@ final class TranscriptionPipeline {
         // Only an active recording is cancelled — never overwrite an error or an in-flight pipeline run
         guard appState.status == .recording else { return }
         audioCapture.cancelCapture()
+        appState.inputLevel = 0
         appState.status = .idle
     }
 
@@ -99,7 +135,7 @@ final class TranscriptionPipeline {
 
     private let pasteboardClearDelay: Double = 5.0
 
-    private func run(audioURL: URL, floatArray: [Float]) async throws {
+    private func run(audioURL: URL, floatArray: [Float], testSession: Int?) async throws {
         // Silence never reaches the speech model — Whisper invents "Thank you." for it
         if !floatArray.isEmpty, AudioCaptureService.isSilent(samples16k: floatArray) {
             TranscriptionService.deleteTempFile(audioURL)
@@ -171,12 +207,28 @@ final class TranscriptionPipeline {
             return
         }
 
-        // Step 4: Paste
-        do {
-            try await paste.paste(finalText)
-        } catch {
-            await paste.clearTranscriptFromPasteboard(after: pasteboardClearDelay)
-            throw error
+        // Decided now, not when the recording started: the user may have closed first run or brought
+        // Honyaku forward while this was transcribing
+        let destination = Self.destination(recordedInTest: testSession, currentTest: appState.firstRunTestSession,
+                                           honyakuIsFrontmost: NSApplication.shared.isActive)
+        switch destination {
+        case .discard:
+            appState.status = .idle
+            return
+        case .firstRunTest:
+            // First run's "Try it" step shows the result in the window: no paste, no history
+            appState.firstRunTestTranscript = finalText
+            return
+        case .saveOnly:
+            break
+        case .paste:
+            // Step 4: Paste
+            do {
+                try await paste.paste(finalText)
+            } catch {
+                await paste.clearTranscriptFromPasteboard(after: pasteboardClearDelay)
+                throw error
+            }
         }
 
         // Step 5: Persist to history (no content in log messages)
@@ -188,5 +240,6 @@ final class TranscriptionPipeline {
             hasSpeakerLabels: !segments.isEmpty
         )
         transcriptStore.save(entry)
+        if destination == .saveOnly { appState.setError(Self.savedWhileInFrontMessage) }
     }
 }

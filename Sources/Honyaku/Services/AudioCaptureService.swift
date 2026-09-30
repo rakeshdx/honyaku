@@ -17,6 +17,10 @@ final class AudioCaptureService {
 
     // Called when the selected microphone is disconnected
     var onDeviceDisconnected: (() -> Void)?
+    /// 0–1 input level while recording, delivered on the main queue at most ~30 times a second.
+    /// Only this number leaves the tap — never audio.
+    var onLevel: ((Double) -> Void)?
+    private var lastLevelTime: CFAbsoluteTime = 0
 
     init() {
         NotificationCenter.default.addObserver(
@@ -42,8 +46,11 @@ final class AudioCaptureService {
         let format = input.outputFormat(forBus: 0)
         // A second tap on the same bus raises an exception, so clear any tap a failed run left behind
         input.removeTap(onBus: 0)
+        lastLevelTime = 0
         input.installTap(onBus: 0, bufferSize: 4096, format: format) { [weak self] buffer, _ in
-            self?.pcmBuffers.append(buffer)
+            guard let self else { return }
+            self.pcmBuffers.append(buffer)
+            self.publishLevel(of: buffer)
         }
         do {
             try engine.start()
@@ -105,6 +112,23 @@ final class AudioCaptureService {
             start = end
         }
         return true
+    }
+
+    /// RMS of the buffer mapped from −50…0 dBFS onto 0…1, throttled to ~30 Hz.
+    private func publishLevel(of buffer: AVAudioPCMBuffer) {
+        guard let onLevel, let samples = buffer.floatChannelData?[0], buffer.frameLength > 0 else { return }
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastLevelTime >= 1.0 / 30 else { return }
+        lastLevelTime = now
+        let level = Self.level(samples: UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength)))
+        DispatchQueue.main.async { onLevel(level) }
+    }
+
+    static func level(samples: UnsafeBufferPointer<Float>) -> Double {
+        guard !samples.isEmpty else { return 0 }
+        let meanSquare = samples.reduce(Float(0)) { $0 + $1 * $1 } / Float(samples.count)
+        let decibels = 10 * log10(max(meanSquare, 1e-10))  // 10·log10(power) == 20·log10(rms)
+        return Double(min(1, max(0, (decibels + 50) / 50)))
     }
 
     // MARK: - Microphone enumeration

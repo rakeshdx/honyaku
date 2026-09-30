@@ -13,7 +13,7 @@ final class AppState {
     // mirrored here for pipeline access).
     // Use object(forKey:) so a missing key returns nil and the ?? default applies correctly.
     // UserDefaults.bool(forKey:) always returns false for missing keys, ignoring register(defaults:)
-    // when AppState is initialized before HonyakuApp.init() calls register().
+    // when AppState is initialized before AppCoordinator.init() calls register().
     var cleanupEnabled: Bool = (UserDefaults.standard.object(forKey: "cleanupEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(cleanupEnabled, forKey: "cleanupEnabled") }
     }
@@ -29,6 +29,18 @@ final class AppState {
     var selectedCleanupModelID: String = AppState.resolvedSelection(
         key: "selectedCleanupModelID", fallback: ModelRegistry.defaultCleanupModelID) {
         didSet { UserDefaults.standard.set(selectedCleanupModelID, forKey: "selectedCleanupModelID") }
+    }
+
+    /// Cleanup system prompt. Resetting to the default removes the stored copy, so future default
+    /// improvements reach the user.
+    var cleanupPrompt: String = UserDefaults.standard.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt {
+        didSet {
+            if cleanupPrompt == CleanupService.defaultPrompt {
+                UserDefaults.standard.removeObject(forKey: "cleanupPrompt")
+            } else {
+                UserDefaults.standard.set(cleanupPrompt, forKey: "cleanupPrompt")
+            }
+        }
     }
 
     // Setup state
@@ -52,6 +64,30 @@ final class AppState {
     /// Selections migrated from a retired model this launch, so the pipeline can fetch the new models
     /// straight away. A static because property initialisers can't reach the instance.
     nonisolated(unsafe) static var migratedSelectionKeys: Set<String> = []
+
+    // Live recording feedback for the keycap and capsule
+    /// 0–1 input level while recording, updated at most ~30 times a second.
+    var inputLevel: Double = 0
+    var recordingStartedAt: Date?
+
+    // First run's "Try it" step: the dictation result is shown in the window instead of pasted.
+    // Each test gets its own number, so a dictation started in a test that has since ended is discarded.
+    private(set) var firstRunTestSession: Int?
+    var firstRunTestTranscript: String?
+    private var lastFirstRunTestSession = 0
+
+    var firstRunTestActive: Bool { firstRunTestSession != nil }
+
+    func beginFirstRunTest() {
+        lastFirstRunTestSession += 1
+        firstRunTestSession = lastFirstRunTestSession
+        firstRunTestTranscript = nil
+    }
+
+    func endFirstRunTest() {
+        firstRunTestSession = nil
+        firstRunTestTranscript = nil
+    }
 
     func setError(_ message: String) {
         status = .error(message)

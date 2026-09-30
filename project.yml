@@ -159,3 +159,14 @@ schemes:
       gatherCoverageData: false
       targets:
         - HonyakuIntegrationTests
+
+  HonyakuUITests:
+    build:
+      targets:
+        Honyaku: all
+        HonyakuUITests: [test]
+    test:
+      config: Debug
+      gatherCoverageData: false
+      targets:
+        - HonyakuUITests

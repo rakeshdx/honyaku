@@ -85,6 +85,22 @@ final class ModelInstallerTests: XCTestCase {
         XCTAssertEqual(runs, 1, "The second install must wait for the first, not start its own")
     }
 
+    func testJoinerReceivesProgress() async throws {
+        let installer = ModelInstaller { _, _, progress in
+            try await Task.sleep(for: .milliseconds(150))
+            progress(0.5)
+            try await Task.sleep(for: .milliseconds(150))
+            progress(1)
+        }
+        let model = try XCTUnwrap(ModelRegistry.model(id: "qwen3-1.7b"))
+        let first = ProgressRecorder(), second = ProgressRecorder()
+        async let a: Void = installer.install(model) { first.record($0) }
+        async let b: Void = installer.install(model) { second.record($0) }
+        _ = try await (a, b)
+        XCTAssertEqual(first.values.last, 1)
+        XCTAssertEqual(second.values.last, 1, "A caller that joined an install must see its progress too")
+    }
+
     func testSequentialInstallsRunAgain() async throws {
         let counter = InstallCounter()
         let installer = ModelInstaller { _, _, _ in await counter.increment() }
@@ -140,4 +156,12 @@ final class ModelInstallerTests: XCTestCase {
 private actor InstallCounter {
     private(set) var count = 0
     func increment() { count += 1 }
+}
+
+private final class ProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recorded: [Double] = []
+
+    func record(_ value: Double) { lock.withLock { recorded.append(value) } }
+    var values: [Double] { lock.withLock { recorded } }
 }
