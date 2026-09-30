@@ -16,10 +16,10 @@
 
 ## 4. Verification
 
+> 4.3–4.4 (mic-unplug checks, never tested by hand) tracked outside OpenSpec (no spec change) in GitHub issue #2.
+
 - [x] 4.1 Regenerate the project with `xcodegen generate`; run `xcodebuild test -scheme HonyakuTests`; all tests pass
 - [x] 4.2 Developer: quick-tap Control, then hold Control and speak; the second press transcribes normally and the mic indicator turns off after the tap
-- [ ] 4.3 Developer: with a USB or Bluetooth mic, unplug it mid-dictation; the error shows, the mic indicator turns off, and the next press records on the default mic without crashing
-- [ ] 4.4 Developer: disconnect a non-audio device (or skip if none is available) while dictating; the recording continues
 
 ## 5. Short utterances
 
