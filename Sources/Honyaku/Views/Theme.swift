@@ -36,17 +36,3 @@ enum Theme {
                 alpha: 1)
     }
 }
-
-/// Short relative times for transcript rows: "just now", "2m ago", "3h ago", "yesterday", "Sep 28".
-enum TimeAgo {
-    static func string(from date: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
-        let seconds = max(0, now.timeIntervalSince(date))
-        if seconds < 45 { return "just now" }
-        if seconds < 3600 { return "\(max(1, Int((seconds / 60).rounded())))m ago" }
-        if calendar.isDate(date, inSameDayAs: now) { return "\(Int(seconds / 3600))h ago" }
-        if let yesterday = calendar.date(byAdding: .day, value: -1, to: now),
-           calendar.isDate(date, inSameDayAs: yesterday) { return "yesterday" }
-        let sameYear = calendar.component(.year, from: date) == calendar.component(.year, from: now)
-        return date.formatted(sameYear ? .dateTime.month(.abbreviated).day() : .dateTime.month(.abbreviated).day().year())
-    }
-}

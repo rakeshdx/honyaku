@@ -173,7 +173,28 @@ The fix: the Settings views and first run bind to `AppState` (`@Bindable`) inste
 - **Download progress:** background model downloads (`AppState.modelDownloads`, for example after a migration) show under the popover header as one caption line each, with a slim progress bar in the `ai` tint.
 - **Older models:** `OlderModelsSection` lists only the known retired folders (Qwen 2.5, Whisper tiny.en, small.en and small), with size, and moves them to the Trash.
 
+### 11. No popover: the icon opens Settings (user decision, after trying the popover)
+
+The popover's history duplicated Settings > History, so the menu bar icon now opens Settings directly.
+- **Why AppKit:** SwiftUI's `MenuBarExtra` can't run an action on click; it always shows its own content. On macOS 14, `showSettingsWindow:` through `sendAction` is blocked for SwiftUI `Settings` scenes: only `SettingsLink` or `openSettings` inside a SwiftUI view can open them.
+- **`AppCoordinator`** (`@MainActor`, owned through `NSApplicationDelegateAdaptor`) holds what the `App` struct held before:
+  - `AppState`, `PermissionManager`, `TranscriptStore`, the hotkey, the pipeline, the capsule and the single-instance service.
+  - `applicationDidFinishLaunching` creates the status item, starts the pipeline if setup is ready, and creates the capsule. This replaces the `MenuBarExtra` label's launch hook.
+- **`StatusItemController`:**
+  - An `NSStatusItem` whose button shows the state symbol (the same `menuBarIcon` mapping, observed from `AppState`).
+  - A left click opens Settings, or first run while `FirstRunView.isNeeded`.
+  - A right-click or Control-click pops up an `NSMenu` with "Settings…" and "Quit Honyaku".
+- **`SettingsWindowController`:** one `NSWindow` whose content is an `NSTabViewController` with `.toolbar` tabs (window `toolbarStyle = .preference`), one `NSHostingController` per tab with the environment injected. Showing it again calls `makeKeyAndOrderFront` and activates the app, so there's never a second window. The controller resizes the window to each tab's preferred size, keeping the title bar in place, and remembers the last tab (`settingsTab`).
+- **First run:** hosted by a single `HostedWindow` (titled `FirstRunView.windowTitle`), which is rebuilt each time it's reopened after being closed, so it resumes at the first incomplete step. It still opens by itself at launch when needed.
+- **Scenes:** the SwiftUI `Settings` and `Window` scenes are removed. SwiftUI needs at least one scene, so the `App` body keeps a `MenuBarExtra` with `isInserted: .constant(false)`, which shows nothing. An empty `Settings { EmptyView() }` would add a blank ⌘, window, so it's not used. ⌘, is on the right-click menu's "Settings…" item.
+- **Tests:** when the app hosts unit tests (`XCTestConfigurationFilePath`), `launch()` skips the status item, capsule and pipeline.
+- **General tab status card:** `KeycapView` plus the state line (the full error text when there is one), the model line, and one line per background download. The slim bar is drawn in `ai`, because a system `ProgressView` turns gray whenever the window isn't key.
+- **Models tab:** a row that's downloading in the background shows that progress too.
+- **Removed:** `MenuBarPopoverView` and `TranscriptRowView`, and `TimeAgo` (the relative times, used only by the popover) along with its tests. The History tab keeps copy and delete per row, and shows the date and time.
+
 ## Risks / Trade-offs
+
+- **[Risk] Moving scene state into an `AppCoordinator` touches start-up wiring.** → The pipeline, hotkey and capsule logic are moved as they are. The launch-time checks (listener installed, warm-up, migration downloads) are re-verified by hand.
 
 - **[Risk] `NSPanel` over a full-screen app, or in Stage Manager.** → `fullScreenAuxiliary` plus `canJoinAllSpaces`. Verify by hand in a full-screen app.
 - **[Risk] Level updates on the main thread every ~33 ms, during recording only.** → Throttled, one `Double`, no allocations.

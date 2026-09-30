@@ -1,34 +1,6 @@
 import SwiftUI
 import ServiceManagement
 
-/// The native Settings window (⌘,), in five tabs.
-struct SettingsView: View {
-    enum Tab: String { case general, models, dictation, history, privacy }
-
-    @AppStorage("settingsTab") private var tab: Tab = .general
-
-    var body: some View {
-        TabView(selection: $tab) {
-            GeneralSettings()
-                .tabItem { Label("General", systemImage: "gearshape") }
-                .tag(Tab.general)
-            ModelsSettings()
-                .tabItem { Label("Models", systemImage: "square.stack.3d.up") }
-                .tag(Tab.models)
-            DictationSettings()
-                .tabItem { Label("Dictation", systemImage: "text.bubble") }
-                .tag(Tab.dictation)
-            HistorySettings()
-                .tabItem { Label("History", systemImage: "clock") }
-                .tag(Tab.history)
-            PrivacySettings()
-                .tabItem { Label("Privacy", systemImage: "lock") }
-                .tag(Tab.privacy)
-        }
-        .tint(Theme.ai)
-    }
-}
-
 // MARK: - General
 
 struct GeneralSettings: View {
@@ -39,16 +11,7 @@ struct GeneralSettings: View {
     var body: some View {
         Form {
             Section {
-                HStack(spacing: 12) {
-                    KeycapView(state: .idle)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Hold Control to talk")
-                        Text("Let go to paste the text where you're typing. A tap on its own does nothing.")
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 2)
+                StatusCard()
             }
             Section {
                 Toggle("Open Honyaku when you log in", isOn: $launchAtLogin)
@@ -74,8 +37,91 @@ struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: 360)
+        .frame(width: 500, height: 420)
         .onAppear { permissionManager.checkAll() }
+    }
+}
+
+/// What Honyaku is doing right now: the keycap, the state (or the full error), the active models, and
+/// any model downloading in the background. With no popover, this is where status lives.
+struct StatusCard: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                KeycapView(state: KeycapView.KeyState(appState.status), level: appState.inputLevel)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(StatusCopy.stateLine(for: appState.status))
+                        .foregroundStyle(isError ? AnyShapeStyle(.orange) : AnyShapeStyle(.primary))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(StatusCopy.detailLine(for: appState.status,
+                                               speechModelID: appState.selectedSpeechModelID,
+                                               cleanupEnabled: appState.cleanupEnabled))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.top, 1)
+            }
+            ForEach(appState.modelDownloads.sorted { $0.key < $1.key }, id: \.key) { id, fraction in
+                DownloadLine(modelID: id, fraction: fraction)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var isError: Bool {
+        if case .error = appState.status { return true }
+        return false
+    }
+}
+
+/// One background download: a caption and a slim progress bar in the accent tint.
+struct DownloadLine: View {
+    let modelID: String
+    let fraction: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(StatusCopy.downloadLine(modelID: modelID, fraction: fraction))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+            // Drawn rather than a ProgressView, which turns gray whenever the window isn't key
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.ai.opacity(0.15))
+                    Capsule().fill(Theme.ai).frame(width: geo.size.width * min(max(fraction, 0), 1))
+                }
+            }
+            .frame(height: 4)
+        }
+    }
+}
+
+enum StatusCopy {
+    static func stateLine(for status: AppStatus) -> String {
+        switch status {
+        case .idle: return "Hold Control to talk"
+        case .recording: return "Listening…"
+        case .transcribing: return "Transcribing…"
+        case .processing: return "Cleaning up…"
+        case .error(let message): return message
+        }
+    }
+
+    /// While idle, how to dictate plus the active models; otherwise just the models.
+    static func detailLine(for status: AppStatus, speechModelID: String, cleanupEnabled: Bool) -> String {
+        let speech = ModelRegistry.model(id: speechModelID)?.displayName ?? "No speech model"
+        let models = "\(speech), cleanup \(cleanupEnabled ? "on" : "off")"
+        guard status == .idle else { return models }
+        return "Let go to paste the text where you're typing. \(models)."
+    }
+
+    static func downloadLine(modelID: String, fraction: Double) -> String {
+        let name = ModelRegistry.model(id: modelID)?.displayName ?? modelID
+        return "Downloading \(name), \(Int((fraction * 100).rounded()))%"
     }
 }
 
@@ -131,6 +177,7 @@ struct ModelsSettings: View {
 struct ModelSettingsRow: View {
     let model: ModelInfo
     @Binding var selectedID: String
+    @Environment(AppState.self) private var appState
     @State private var isDownloading = false
     @State private var progress: Double = 0
     @State private var failure: String?
@@ -151,6 +198,8 @@ struct ModelSettingsRow: View {
             Spacer()
             if isDownloading {
                 ProgressView(value: progress).frame(width: 90)
+            } else if let background {
+                ProgressView(value: background).frame(width: 90)
             } else {
                 switch state {
                 case .installed:
@@ -170,9 +219,13 @@ struct ModelSettingsRow: View {
         .padding(.vertical, 2)
     }
 
+    /// A download started in the background (e.g. after a migration) rather than from this row.
+    private var background: Double? { appState.modelDownloads[model.id] }
+
     private var detail: String {
         if let failure { return failure }
         if isDownloading { return "Downloading, \(Int(progress * Double(model.sizeMB))) of \(model.sizeMB) MB" }
+        if let background { return "Downloading, \(Int(background * Double(model.sizeMB))) of \(model.sizeMB) MB" }
         if case .installed(let bytes) = state {
             return "\(ModelCopy.summary(for: model)), \(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) on disk"
         }

@@ -13,7 +13,7 @@ final class AppState {
     // mirrored here for pipeline access).
     // Use object(forKey:) so a missing key returns nil and the ?? default applies correctly.
     // UserDefaults.bool(forKey:) always returns false for missing keys, ignoring register(defaults:)
-    // when AppState is initialized before HonyakuApp.init() calls register().
+    // when AppState is initialized before AppCoordinator.init() calls register().
     var cleanupEnabled: Bool = (UserDefaults.standard.object(forKey: "cleanupEnabled") as? Bool) ?? true {
         didSet { UserDefaults.standard.set(cleanupEnabled, forKey: "cleanupEnabled") }
     }

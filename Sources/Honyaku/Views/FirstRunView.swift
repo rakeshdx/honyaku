@@ -14,7 +14,6 @@ struct FirstRunView: View {
         }
     }
 
-    static let windowID = "first-run"
     static let windowTitle = "Set Up Honyaku"
 
     /// First run is needed while a permission is missing or models haven't been set up.

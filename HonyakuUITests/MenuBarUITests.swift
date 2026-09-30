@@ -1,5 +1,6 @@
 import XCTest
 
+/// Clicking the menu bar icon opens Settings directly; there's no popover.
 final class MenuBarUITests: XCTestCase {
     let app = XCUIApplication()
 
@@ -10,56 +11,32 @@ final class MenuBarUITests: XCTestCase {
         sleep(1)
     }
 
+    private var statusItem: XCUIElement { app.statusItems["Honyaku"].firstMatch }
+
     func testMenuBarIconExists() throws {
-        let statusItem = app.menuBars.firstMatch
-        XCTAssertTrue(statusItem.exists, "Honyaku menu bar icon should be visible")
+        XCTAssertTrue(statusItem.waitForExistence(timeout: 2), "Honyaku menu bar icon should be visible")
     }
 
-    func testPopoverOpensOnClick() throws {
-        // Click the Honyaku menu bar extra
-        let menuBarButton = app.menuBars.buttons["Honyaku"].firstMatch
-        guard menuBarButton.exists else {
-            throw XCTSkip("Menu bar button not found — ensure app launched with menu bar mode")
-        }
-        menuBarButton.click()
-        let settingsButton = app.buttons["Settings…"].firstMatch
-        XCTAssertTrue(settingsButton.waitForExistence(timeout: 2), "Settings button should appear after clicking menu bar icon")
-    }
-
-    func testSettingsPanelOpens() throws {
-        let menuBarButton = app.menuBars.buttons["Honyaku"].firstMatch
-        guard menuBarButton.exists else { throw XCTSkip("Menu bar button not found") }
-        menuBarButton.click()
-
-        let settingsButton = app.buttons["Settings…"].firstMatch
-        guard settingsButton.waitForExistence(timeout: 2) else { throw XCTSkip("Popover did not open") }
-        settingsButton.click()
-
-        // The native Settings window opens on its General tab (or the last tab used)
+    func testClickOpensSettings() throws {
+        guard statusItem.waitForExistence(timeout: 2) else { throw XCTSkip("Menu bar icon not found") }
+        statusItem.click()
+        // Settings opens on its General tab, or the last tab used (first run instead if setup isn't done)
         let generalTab = app.toolbars.buttons["General"].firstMatch
-        XCTAssertTrue(generalTab.waitForExistence(timeout: 3), "Settings window with its General tab should appear")
+        XCTAssertTrue(generalTab.waitForExistence(timeout: 3), "Settings window should open straight from the icon")
     }
 
-    func testClearHistoryConfirmationDialog() throws {
-        let menuBarButton = app.menuBars.buttons["Honyaku"].firstMatch
-        guard menuBarButton.exists else { throw XCTSkip("Menu bar button not found") }
-        menuBarButton.click()
+    func testClickingAgainKeepsOneSettingsWindow() throws {
+        guard statusItem.waitForExistence(timeout: 2) else { throw XCTSkip("Menu bar icon not found") }
+        statusItem.click()
+        statusItem.click()
+        XCTAssertLessThanOrEqual(app.windows.count, 1, "Only one Settings window")
+    }
 
-        let settingsButton = app.buttons["Settings…"].firstMatch
-        guard settingsButton.waitForExistence(timeout: 2) else { throw XCTSkip("Popover not open") }
-        settingsButton.click()
-
-        // Navigate to History tab
-        let historyTab = app.buttons["History"].firstMatch
-        if historyTab.waitForExistence(timeout: 2) { historyTab.click() }
-
-        let clearButton = app.buttons["Clear All History"].firstMatch
-        if clearButton.exists && clearButton.isEnabled {
-            clearButton.click()
-            // Confirmation alert should appear
-            let alert = app.alerts.firstMatch
-            XCTAssertTrue(alert.waitForExistence(timeout: 2), "Clear History confirmation alert should appear")
-            alert.buttons["Cancel"].click()
-        }
+    func testRightClickShowsQuit() throws {
+        guard statusItem.waitForExistence(timeout: 2) else { throw XCTSkip("Menu bar icon not found") }
+        statusItem.rightClick()
+        XCTAssertTrue(app.menuItems["Quit Honyaku"].waitForExistence(timeout: 2))
+        XCTAssertTrue(app.menuItems["Settings…"].exists)
+        app.typeKey(.escape, modifierFlags: [])
     }
 }

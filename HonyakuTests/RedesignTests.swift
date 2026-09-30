@@ -1,39 +1,6 @@
 import XCTest
 @testable import Honyaku
 
-final class TimeAgoTests: XCTestCase {
-    private let calendar = Calendar(identifier: .gregorian)
-    private let now = ISO8601DateFormatter().date(from: "2026-09-30T15:00:00Z")!
-
-    private func ago(_ seconds: TimeInterval) -> String {
-        TimeAgo.string(from: now.addingTimeInterval(-seconds), now: now, calendar: calendar)
-    }
-
-    func testRecentIsJustNow() {
-        XCTAssertEqual(ago(10), "just now")
-    }
-
-    func testMinutesAndHours() {
-        XCTAssertEqual(ago(120), "2m ago")
-        XCTAssertEqual(ago(59 * 60), "59m ago")
-        XCTAssertEqual(ago(3 * 3600), "3h ago")
-    }
-
-    func testFutureDatesClampToJustNow() {
-        XCTAssertEqual(ago(-30), "just now")
-    }
-
-    func testYesterdayAndOlder() {
-        var cal = calendar
-        cal.timeZone = TimeZone(identifier: "UTC")!
-        let yesterday = now.addingTimeInterval(-24 * 3600)
-        XCTAssertEqual(TimeAgo.string(from: yesterday, now: now, calendar: cal), "yesterday")
-        let older = now.addingTimeInterval(-5 * 24 * 3600)
-        XCTAssertNotEqual(TimeAgo.string(from: older, now: now, calendar: cal), "yesterday")
-        XCTAssertFalse(TimeAgo.string(from: older, now: now, calendar: cal).hasSuffix("ago"))
-    }
-}
-
 @MainActor
 final class TranscriptStoreRedesignTests: XCTestCase {
     private func entry(_ text: String) -> TranscriptEntry {
@@ -91,5 +58,41 @@ final class KeycapStateTests: XCTestCase {
         XCTAssertEqual(KeycapView.KeyState(.transcribing), .busy)
         XCTAssertEqual(KeycapView.KeyState(.processing), .busy)
         XCTAssertEqual(KeycapView.KeyState(.error("x")), .error)
+    }
+}
+
+final class StatusCopyTests: XCTestCase {
+    func testStateLinesCoverEveryStatus() {
+        XCTAssertEqual(StatusCopy.stateLine(for: .idle), "Hold Control to talk")
+        XCTAssertEqual(StatusCopy.stateLine(for: .recording), "Listening…")
+        XCTAssertEqual(StatusCopy.stateLine(for: .transcribing), "Transcribing…")
+        XCTAssertEqual(StatusCopy.stateLine(for: .processing), "Cleaning up…")
+        XCTAssertEqual(StatusCopy.stateLine(for: .error("Microphone disconnected.")), "Microphone disconnected.")
+    }
+
+    func testIdleDetailExplainsDictationAndNamesTheModels() {
+        let line = StatusCopy.detailLine(for: .idle, speechModelID: "parakeet-tdt-v2", cleanupEnabled: true)
+        XCTAssertTrue(line.hasPrefix("Let go to paste"))
+        XCTAssertTrue(line.contains("cleanup on"))
+    }
+
+    func testBusyDetailOnlyNamesTheModels() {
+        let line = StatusCopy.detailLine(for: .recording, speechModelID: "parakeet-tdt-v2", cleanupEnabled: false)
+        XCTAssertFalse(line.contains("Let go"))
+        XCTAssertTrue(line.hasSuffix("cleanup off"))
+    }
+
+    func testDownloadLineRoundsThePercentage() {
+        XCTAssertTrue(StatusCopy.downloadLine(modelID: "qwen3-1.7b", fraction: 0.426).hasSuffix(", 43%"))
+        XCTAssertEqual(StatusCopy.downloadLine(modelID: "unknown", fraction: 1), "Downloading unknown, 100%")
+    }
+}
+
+final class StatusItemSymbolTests: XCTestCase {
+    func testSymbolFollowsStatus() {
+        XCTAssertEqual(StatusItemController.symbol(for: .idle), "waveform")
+        XCTAssertEqual(StatusItemController.symbol(for: .recording), "waveform.circle.fill")
+        XCTAssertEqual(StatusItemController.symbol(for: .transcribing), "ellipsis.circle")
+        XCTAssertEqual(StatusItemController.symbol(for: .error("x")), "exclamationmark.circle")
     }
 }

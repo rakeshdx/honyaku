@@ -38,3 +38,12 @@
 - [ ] 6.4 Developer: fresh first run end to end (reset `setupComplete`), including the live test
 - [x] 6.5 Rebase onto `model-upgrade` once it merges: swap in `ModelInstaller` and `ModelRegistry.recommended(forPhysicalMemory:)`; Language picker in the Dictation tab; download progress in the popover; "Older models" with Move to Trash (design Decision 10)
 - [x] 6.8 Unit-test `RetiredModelFiles.onDisk` against a temporary folder (known folders only; missing ones skipped)
+
+## 7. Icon opens Settings (no popover)
+
+- [x] 7.1 `AppCoordinator` via `NSApplicationDelegateAdaptor`: move app state, pipeline, hotkey, capsule and single-instance wiring out of the `App` struct; launch work in `applicationDidFinishLaunching`
+- [x] 7.2 `StatusItemController`: state symbol; left click opens Settings (or first run when needed); right-click menu with Settings… and Quit Honyaku
+- [x] 7.3 `SettingsWindowController` and `FirstRunWindowController`: single AppKit windows hosting the SwiftUI views; reopening brings the same window forward
+- [x] 7.4 General tab status card (keycap, state or full error, model line, background downloads); Models tab shows background download progress
+- [x] 7.5 Remove `MenuBarPopoverView` and its tests; renders of the General tab (idle, recording, error, downloading) reviewed
+- [ ] 7.6 Unit tests pass; developer: left click, right-click menu, Quit, first run while incomplete, one window only, launch-time listener still active
