@@ -3,7 +3,7 @@ import Foundation
 /// Background model downloads the user can see: a migrated model at launch, or a missing model a dictation
 /// needed. Progress is published on `AppState.modelDownloads`; a dictation never waits for one.
 @MainActor
-final class ModelDownloads {
+final class ModelDownloads: ModelAvailability {
     private let appState: AppState
     private let installer: ModelInstaller
     private var running: Set<String> = []
@@ -36,6 +36,12 @@ final class ModelDownloads {
             }
         }
     }
+
+    func isInstalled(_ model: ModelInfo) -> Bool { ModelInstaller.isInstalled(model) }
+
+    func startDownload(_ model: ModelInfo) { start(model) }
+
+    func downloadMessage(for model: ModelInfo) -> String { message(for: model) }
 
     /// "Downloading Parakeet TDT 0.6B v2, 42%"
     func message(for model: ModelInfo) -> String {

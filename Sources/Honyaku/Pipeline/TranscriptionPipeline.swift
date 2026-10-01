@@ -10,22 +10,55 @@ enum DictationDestination: Equatable {
     case discard
 }
 
-/// Orchestrates: AudioCapture → WhisperKit → SpeakerKit → CleanupLLM → PasteService
+/// The services a pipeline runs a dictation through. Tests pass fakes.
+@MainActor
+struct PipelineServices {
+    var audioCapture: any AudioCapturing
+    var transcription: any ASRService
+    var diarization: any DiarizationServiceProtocol
+    var cleanup: any CleanupServiceProtocol
+    var paste: any PasteServiceProtocol
+    var models: any ModelAvailability
+    var targets: any TargetAppResolving
+
+    static func live(appState: AppState) -> PipelineServices {
+        PipelineServices(audioCapture: AudioCaptureService(), transcription: TranscriptionService(),
+                         diarization: DiarizationService(), cleanup: CleanupService(), paste: PasteService(),
+                         models: ModelDownloads(appState: appState), targets: TargetAppResolver())
+    }
+}
+
+/// Orchestrates: AudioCapture → speech model → diarization → cleanup → paste, with feature stages
+/// between them (see `PipelineStages`).
 @MainActor
 final class TranscriptionPipeline {
-    private let audioCapture = AudioCaptureService()
-    private let transcription = TranscriptionService()
-    private let diarization = DiarizationService()
-    private let cleanup = CleanupService()
-    private let paste = PasteService()
+    private let audioCapture: any AudioCapturing
+    private let transcription: any ASRService
+    private let diarization: any DiarizationServiceProtocol
+    private let cleanup: any CleanupServiceProtocol
+    private let paste: any PasteServiceProtocol
+    private let models: any ModelAvailability
+    private let targets: any TargetAppResolving
+    private let stages: PipelineStages
     private let transcriptStore: TranscriptStore
     private let appState: AppState
-    private let downloads: ModelDownloads
+    /// Settings read on every dictation: `.standard` in the app, a private suite in tests.
+    private let defaults: UserDefaults
 
-    init(appState: AppState, transcriptStore: TranscriptStore) {
+    init(appState: AppState, transcriptStore: TranscriptStore, services: PipelineServices? = nil,
+         stages: PipelineStages? = nil, defaults: UserDefaults = .standard) {
+        let services = services ?? .live(appState: appState)
+        audioCapture = services.audioCapture
+        transcription = services.transcription
+        diarization = services.diarization
+        cleanup = services.cleanup
+        paste = services.paste
+        models = services.models
+        targets = services.targets
+        self.stages = stages ?? .live
         self.appState = appState
         self.transcriptStore = transcriptStore
-        downloads = ModelDownloads(appState: appState)
+        self.defaults = defaults
         audioCapture.prepare()
         audioCapture.onLevel = { [weak appState] level in
             MainActor.assumeIsolated { appState?.inputLevel = level }
@@ -59,8 +92,10 @@ final class TranscriptionPipeline {
         let migrated: [String: String] = ["selectedSpeechModelID": modelID,
                                           "selectedCleanupModelID": appState.selectedCleanupModelID]
         for (key, id) in migrated where AppState.migratedSelectionKeys.contains(key) {
-            if let model = ModelRegistry.model(id: id) { downloads.start(model) }
+            if let model = ModelRegistry.model(id: id) { models.startDownload(model) }
         }
+        let transcription = transcription
+        let cleanup = cleanup
         Task {
             try? await transcription.prepareIfDownloaded(modelID: modelID)
             if cleanupEnabled { try? await cleanup.prepare() }
@@ -83,16 +118,17 @@ final class TranscriptionPipeline {
 
     // MARK: - Recording lifecycle
 
-    /// The first-run test that was running when the current recording started, if any.
-    private var recordingTestSession: Int?
+    /// The current recording's context, captured when it started.
+    private var recordingContext: DictationContext?
 
-    func startRecording() {
+    func startRecording(mode: DictationMode = .dictate) {
         guard !appState.status.isBusy else { return }
         // Clear any prior error so Control key works again after a failed pipeline run
         appState.clearError()
         do {
             try audioCapture.startCapture()
-            recordingTestSession = appState.firstRunTestSession
+            recordingContext = DictationContext(mode: mode, appAtStart: targets.frontmostApp(),
+                                                firstRunTestSession: appState.firstRunTestSession)
             appState.inputLevel = 0
             appState.recordingStartedAt = Date()
             appState.status = .recording
@@ -101,16 +137,21 @@ final class TranscriptionPipeline {
         }
     }
 
-    func stopRecordingAndProcess() {
-        guard appState.status == .recording else { return }
+    /// `mode` is the mode the gesture ended in; it wins over the one the recording started in.
+    /// Returns the run, so tests can wait for it.
+    @discardableResult
+    func stopRecordingAndProcess(mode: DictationMode? = nil) -> Task<Void, Never>? {
+        guard appState.status == .recording else { return nil }
         appState.status = .transcribing
         appState.inputLevel = 0
-        let testSession = recordingTestSession
+        var context = recordingContext ?? DictationContext()
+        recordingContext = nil
+        if let mode { context.mode = mode }
 
-        Task {
+        return Task {
             do {
                 let (audioURL, floatArray) = try audioCapture.stopCaptureAndFlushBoth()
-                try await run(audioURL: audioURL, floatArray: floatArray, testSession: testSession)
+                try await run(audioURL: audioURL, floatArray: floatArray, context: context)
             } catch AudioCaptureError.noMicrophonePermission {
                 appState.setError("Honyaku needs microphone access. Turn it on in System Settings → Privacy & Security → Microphone.")
             } catch {
@@ -127,6 +168,7 @@ final class TranscriptionPipeline {
         // Only an active recording is cancelled — never overwrite an error or an in-flight pipeline run
         guard appState.status == .recording else { return }
         audioCapture.cancelCapture()
+        recordingContext = nil
         appState.inputLevel = 0
         appState.status = .idle
     }
@@ -135,7 +177,8 @@ final class TranscriptionPipeline {
 
     private let pasteboardClearDelay: Double = 5.0
 
-    private func run(audioURL: URL, floatArray: [Float], testSession: Int?) async throws {
+    private func run(audioURL: URL, floatArray: [Float], context startContext: DictationContext) async throws {
+        var context = startContext
         // Silence never reaches the speech model — Whisper invents "Thank you." for it
         if !floatArray.isEmpty, AudioCaptureService.isSilent(samples16k: floatArray) {
             TranscriptionService.deleteTempFile(audioURL)
@@ -145,17 +188,20 @@ final class TranscriptionPipeline {
 
         // Step 1: ASR (the service deletes audioURL on return; Parakeet reads the float samples directly)
         // Read the saved choice each time, as cleanup does, so switching models in Settings applies at once
-        let modelID = UserDefaults.standard.string(forKey: "selectedSpeechModelID") ?? appState.selectedSpeechModelID
+        let modelID = defaults.string(forKey: "selectedSpeechModelID") ?? appState.selectedSpeechModelID
         // A missing model downloads in the background; this dictation returns rather than waiting minutes
-        if let speechModel = ModelRegistry.model(id: modelID), !ModelInstaller.isInstalled(speechModel) {
+        if let speechModel = ModelRegistry.model(id: modelID), !models.isInstalled(speechModel) {
             TranscriptionService.deleteTempFile(audioURL)
-            downloads.start(speechModel)
-            appState.setError(downloads.message(for: speechModel))
+            models.startDownload(speechModel)
+            appState.setError(models.downloadMessage(for: speechModel))
             return
         }
-        let result = try await transcription.transcribe(audioURL: audioURL, samples16k: floatArray, modelID: modelID)
+        for preparer in stages.preparers { preparer.prepare(&context) }
+        let result = try await transcription.transcribe(audioURL: audioURL, samples16k: floatArray, modelID: modelID,
+                                                        hints: context.speechHints)
+        context.language = result.language
         // um/uh are fillers in English only — "um" is a word in German and Portuguese
-        let englishFillers = result.language.lowercased().hasPrefix("en")
+        context.englishFillers = result.language.lowercased().hasPrefix("en")
 
         // Empty / silence → discard
         guard !result.rawText.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -180,37 +226,30 @@ final class TranscriptionPipeline {
                 )
             }
         }
+        // After the speaker merge, which rebuilds the text from the speech model's segments
+        labeledText = PipelineStages.apply(stages.afterTranscription, to: labeledText, context: context)
 
         // Step 3: Cleanup (optional)
-        let cleanupPrompt = UserDefaults.standard.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt
-        var finalText = labeledText
-        let cleanupModel = ModelRegistry.model(
-            id: UserDefaults.standard.string(forKey: "selectedCleanupModelID") ?? appState.selectedCleanupModelID)
-        if appState.cleanupEnabled, let cleanupModel, !ModelInstaller.isInstalled(cleanupModel) {
-            // Paste the speaker's words now; cleanup resumes once its model is downloaded
-            downloads.start(cleanupModel)
-        } else if appState.cleanupEnabled {
-            do {
-                let cleaned = try await cleanup.clean(labeledText, prompt: cleanupPrompt, englishFillers: englishFillers)
-                let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
-                finalText = trimmed.isEmpty ? labeledText : trimmed
-            } catch {
-                // Timeout, model not loaded, or any other error — fall back to labeled text
-                finalText = labeledText
-            }
-        }
+        var finalText = await llmStage(labeledText, context: context)
 
         // In English, um/umm/uh/hmm are never content, whatever the model (or no model) left in
-        if englishFillers { finalText = CleanupService.removeUnambiguousFillers(finalText) }
+        if context.englishFillers { finalText = CleanupService.removeUnambiguousFillers(finalText) }
+
+        // Decided now, not when the recording started: the user may have closed first run or brought
+        // Honyaku forward while this was transcribing
+        let target = targets.pasteTarget()
+        context.appAtPaste = target.app
+        context.honyakuIsFrontmost = target.honyakuIsFrontmost
+        context.isSecureField = target.isSecureField
+        finalText = PipelineStages.apply(stages.final, to: finalText, context: context)
         guard !finalText.isEmpty else {
             appState.status = .idle
             return
         }
 
-        // Decided now, not when the recording started: the user may have closed first run or brought
-        // Honyaku forward while this was transcribing
-        let destination = Self.destination(recordedInTest: testSession, currentTest: appState.firstRunTestSession,
-                                           honyakuIsFrontmost: NSApplication.shared.isActive)
+        let destination = Self.destination(recordedInTest: context.firstRunTestSession,
+                                           currentTest: appState.firstRunTestSession,
+                                           honyakuIsFrontmost: context.honyakuIsFrontmost)
         switch destination {
         case .discard:
             appState.status = .idle
@@ -237,9 +276,36 @@ final class TranscriptionPipeline {
             cleanedText: finalText,
             modelTier: modelID,
             durationSeconds: result.durationSeconds,
-            hasSpeakerLabels: !segments.isEmpty
+            hasSpeakerLabels: !segments.isEmpty,
+            mode: context.mode.id,
+            appBundleID: context.appAtPaste?.bundleID
         )
         transcriptStore.save(entry)
         if destination == .saveOnly { appState.setError(Self.savedWhileInFrontMessage) }
+    }
+
+    /// The model step: word-for-word cleanup when it's on and its model is installed; otherwise the text
+    /// as it is. Any failure falls back to the text it was given.
+    private func llmStage(_ text: String, context: DictationContext) async -> String {
+        guard appState.cleanupEnabled else { return text }
+        let cleanupModel = ModelRegistry.model(
+            id: defaults.string(forKey: "selectedCleanupModelID") ?? appState.selectedCleanupModelID)
+        if let cleanupModel, !models.isInstalled(cleanupModel) {
+            // Paste the speaker's words now; cleanup resumes once its model is downloaded
+            models.startDownload(cleanupModel)
+            return text
+        }
+        let request = CleanupRequest(
+            systemPrompt: defaults.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt,
+            extraRules: context.cleanupRules,
+            englishFillers: context.englishFillers)
+        do {
+            let cleaned = try await cleanup.clean(text, request: request)
+            let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? text : trimmed
+        } catch {
+            // Timeout, model not loaded, or any other error — fall back to the text as it is
+            return text
+        }
     }
 }

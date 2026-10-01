@@ -9,6 +9,25 @@ enum CleanupError: Error {
     case modelNotLoaded
 }
 
+/// One call to the cleanup model.
+struct CleanupRequest: Equatable, Sendable {
+    enum Faithfulness: Equatable, Sendable {
+        /// Output may only delete words from the transcript; anything else falls back to the transcript.
+        case strict
+        /// Output is used as the model wrote it. The caller is responsible for its safety.
+        case none
+    }
+
+    var systemPrompt: String
+    /// Extra lines appended to the system prompt, each on its own line.
+    var extraRules: [String] = []
+    var faithfulness: Faithfulness = .strict
+    /// Output token cap; nil uses `CleanupService.outputTokenLimit(for:)`.
+    var maxTokens: Int?
+    /// Whether um/uh and the set-off English fillers may be dropped. Only for English transcripts.
+    var englishFillers = true
+}
+
 actor CleanupService: CleanupServiceProtocol {
     private var loadedModelID: String?
     private var container: ModelContainer?
@@ -45,9 +64,33 @@ actor CleanupService: CleanupServiceProtocol {
         transcript.contains("[Speaker ") ? base + "\n" + speakerLabelRule : base
     }
 
+    /// The system prompt for `request`: the speaker-label rule when the transcript has labels, then each
+    /// extra rule on its own line.
+    static func systemPrompt(for request: CleanupRequest, transcript: String) -> String {
+        ([prompt(request.systemPrompt, for: transcript)] + request.extraRules).joined(separator: "\n")
+    }
+
+    /// The text to use for the model's `output`: the transcript when the output is empty, or when a strict
+    /// request's output changed the transcript's words.
+    static func accept(_ output: String, raw rawText: String, request: CleanupRequest) -> String {
+        if output.isEmpty { return rawText }
+        guard request.faithfulness == .strict else { return output }
+        // Never trust the model with the user's words: if it lost or added any, keep theirs
+        guard isFaithful(raw: rawText, cleaned: output, englishFillers: request.englishFillers) else {
+            // Transcript text is never logged
+            log.info("Cleanup output changed the transcript's words; using raw transcript")
+            return request.englishFillers ? removeUnambiguousFillers(rawText) : rawText
+        }
+        return output
+    }
+
     /// `englishFillers`: whether um/uh and the set-off English fillers may be dropped. Only for English
     /// transcripts: "um" is a real word in German and Portuguese.
     func clean(_ rawText: String, prompt: String, englishFillers: Bool = true) async throws -> String {
+        try await clean(rawText, request: CleanupRequest(systemPrompt: prompt, englishFillers: englishFillers))
+    }
+
+    func clean(_ rawText: String, request: CleanupRequest) async throws -> String {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return rawText
         }
@@ -56,17 +99,11 @@ actor CleanupService: CleanupServiceProtocol {
 
         return try await withThrowingTaskGroup(of: String.self) { group in
             group.addTask {
-                let cleaned = try await CleanupService.modelOutput(
-                    for: rawText, prompt: CleanupService.prompt(prompt, for: rawText), model: model, info: info,
-                    reuse: promptCache)
-                if cleaned.isEmpty { return rawText }
-                // Never trust the model with the user's words: if it lost or added any, keep theirs
-                guard CleanupService.isFaithful(raw: rawText, cleaned: cleaned, englishFillers: englishFillers) else {
-                    // Transcript text is never logged
-                    CleanupService.log.info("Cleanup output changed the transcript's words; using raw transcript")
-                    return englishFillers ? CleanupService.removeUnambiguousFillers(rawText) : rawText
-                }
-                return cleaned
+                let output = try await CleanupService.modelOutput(
+                    for: rawText, prompt: CleanupService.systemPrompt(for: request, transcript: rawText),
+                    maxTokens: request.maxTokens ?? CleanupService.outputTokenLimit(for: rawText),
+                    model: model, info: info, reuse: promptCache)
+                return CleanupService.accept(output, raw: rawText, request: request)
             }
             group.addTask {
                 try await Task.sleep(for: .seconds(self.timeoutSeconds))
@@ -89,14 +126,15 @@ actor CleanupService: CleanupServiceProtocol {
     func modelOutput(for rawText: String, prompt: String) async throws -> String {
         let (model, info) = try await loadModel()
         return try await CleanupService.modelOutput(for: rawText, prompt: CleanupService.prompt(prompt, for: rawText),
+                                                    maxTokens: CleanupService.outputTokenLimit(for: rawText),
                                                     model: model, info: info, reuse: promptCache)
     }
 
-    private static func modelOutput(for rawText: String, prompt: String, model: ModelContainer,
+    private static func modelOutput(for rawText: String, prompt: String, maxTokens: Int, model: ModelContainer,
                                     info: ModelInfo, reuse: PromptPrefixCache) async throws -> String {
         // Qwen3 reasons before answering unless its chat template is told not to
         let templateContext: [String: any Sendable]? = info.disablesThinking ? ["enable_thinking": false] : nil
-        let parameters = GenerateParameters(maxTokens: outputTokenLimit(for: rawText), temperature: 0)
+        let parameters = GenerateParameters(maxTokens: maxTokens, temperature: 0)
         let cacheKey = "\(info.id)\n\(info.disablesThinking)\n\(prompt)"
 
         let generation = reuse.generation

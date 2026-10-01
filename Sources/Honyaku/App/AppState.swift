@@ -9,43 +9,55 @@ final class AppState {
     /// Background model downloads in progress: model ID → 0…1.
     var modelDownloads: [String: Double] = [:]
 
-    // Feature toggles (backed by UserDefaults via AppStorage in views,
-    // mirrored here for pipeline access).
-    // Use object(forKey:) so a missing key returns nil and the ?? default applies correctly.
+    /// Where settings are saved: `.standard` in the app, a private suite in tests.
+    @ObservationIgnored private let defaults: UserDefaults
+
+    // Feature toggles, saved to `defaults`.
+    // Read with object(forKey:) so a missing key returns nil and the ?? default applies correctly.
     // UserDefaults.bool(forKey:) always returns false for missing keys, ignoring register(defaults:)
     // when AppState is initialized before AppCoordinator.init() calls register().
-    var cleanupEnabled: Bool = (UserDefaults.standard.object(forKey: "cleanupEnabled") as? Bool) ?? true {
-        didSet { UserDefaults.standard.set(cleanupEnabled, forKey: "cleanupEnabled") }
+    var cleanupEnabled: Bool {
+        didSet { defaults.set(cleanupEnabled, forKey: "cleanupEnabled") }
     }
-    var diarizationEnabled: Bool = (UserDefaults.standard.object(forKey: "diarizationEnabled") as? Bool) ?? false {
-        didSet { UserDefaults.standard.set(diarizationEnabled, forKey: "diarizationEnabled") }
+    var diarizationEnabled: Bool {
+        didSet { defaults.set(diarizationEnabled, forKey: "diarizationEnabled") }
     }
 
     // Selected model IDs — retired models are migrated to their replacement on first read
-    var selectedSpeechModelID: String = AppState.resolvedSelection(
-        key: "selectedSpeechModelID", fallback: ModelRegistry.defaultSpeechModelID) {
-        didSet { UserDefaults.standard.set(selectedSpeechModelID, forKey: "selectedSpeechModelID") }
+    var selectedSpeechModelID: String {
+        didSet { defaults.set(selectedSpeechModelID, forKey: "selectedSpeechModelID") }
     }
-    var selectedCleanupModelID: String = AppState.resolvedSelection(
-        key: "selectedCleanupModelID", fallback: ModelRegistry.defaultCleanupModelID) {
-        didSet { UserDefaults.standard.set(selectedCleanupModelID, forKey: "selectedCleanupModelID") }
+    var selectedCleanupModelID: String {
+        didSet { defaults.set(selectedCleanupModelID, forKey: "selectedCleanupModelID") }
     }
 
     /// Cleanup system prompt. Resetting to the default removes the stored copy, so future default
     /// improvements reach the user.
-    var cleanupPrompt: String = UserDefaults.standard.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt {
+    var cleanupPrompt: String {
         didSet {
             if cleanupPrompt == CleanupService.defaultPrompt {
-                UserDefaults.standard.removeObject(forKey: "cleanupPrompt")
+                defaults.removeObject(forKey: "cleanupPrompt")
             } else {
-                UserDefaults.standard.set(cleanupPrompt, forKey: "cleanupPrompt")
+                defaults.set(cleanupPrompt, forKey: "cleanupPrompt")
             }
         }
     }
 
     // Setup state
-    var setupComplete: Bool = UserDefaults.standard.bool(forKey: "setupComplete") {
-        didSet { UserDefaults.standard.set(setupComplete, forKey: "setupComplete") }
+    var setupComplete: Bool {
+        didSet { defaults.set(setupComplete, forKey: "setupComplete") }
+    }
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        cleanupEnabled = (defaults.object(forKey: "cleanupEnabled") as? Bool) ?? true
+        diarizationEnabled = (defaults.object(forKey: "diarizationEnabled") as? Bool) ?? false
+        selectedSpeechModelID = AppState.resolvedSelection(
+            key: "selectedSpeechModelID", fallback: ModelRegistry.defaultSpeechModelID, defaults: defaults)
+        selectedCleanupModelID = AppState.resolvedSelection(
+            key: "selectedCleanupModelID", fallback: ModelRegistry.defaultCleanupModelID, defaults: defaults)
+        cleanupPrompt = defaults.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt
+        setupComplete = defaults.bool(forKey: "setupComplete")
     }
 
     /// Reads a saved model selection, migrating a retired ID and writing the result back so services

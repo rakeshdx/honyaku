@@ -150,8 +150,8 @@ final class AppCoordinator {
         if pipeline == nil {
             let p = TranscriptionPipeline(appState: appState, transcriptStore: transcriptStore)
             pipeline = p
-            hotkeyService.onRecordingStarted = { p.startRecording() }
-            hotkeyService.onRecordingEnded   = { p.stopRecordingAndProcess() }
+            hotkeyService.onRecordingStarted = { mode in p.startRecording(mode: mode) }
+            hotkeyService.onRecordingEnded   = { mode in _ = p.stopRecordingAndProcess(mode: mode) }
             hotkeyService.onRecordingCancelled = { p.cancelRecording() }
             let appState = appState
             hotkeyService.setPipelineBusyCheck { appState.status.isBusy }

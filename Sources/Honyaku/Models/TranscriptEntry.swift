@@ -8,6 +8,10 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
     let modelTier: String
     let durationSeconds: Double
     let hasSpeakerLabels: Bool
+    /// `DictationMode.id` the entry was made in; nil for entries saved before modes existed.
+    let mode: String?
+    /// The app in front when the text was pasted or saved; nil for older entries.
+    let appBundleID: String?
 
     init(
         id: UUID = UUID(),
@@ -16,7 +20,9 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
         timestamp: Date = Date(),
         modelTier: String,
         durationSeconds: Double,
-        hasSpeakerLabels: Bool = false
+        hasSpeakerLabels: Bool = false,
+        mode: String? = nil,
+        appBundleID: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -25,5 +31,7 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
         self.modelTier = modelTier
         self.durationSeconds = durationSeconds
         self.hasSpeakerLabels = hasSpeakerLabels
+        self.mode = mode
+        self.appBundleID = appBundleID
     }
 }

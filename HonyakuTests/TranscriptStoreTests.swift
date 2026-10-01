@@ -44,3 +44,45 @@ final class TranscriptStoreTests: XCTestCase {
         XCTAssertTrue(store.entries.isEmpty)
     }
 }
+
+@MainActor
+final class TranscriptStoreFileTests: XCTestCase {
+    private var folder: URL!
+
+    override func setUpWithError() throws {
+        folder = FileManager.default.temporaryDirectory.appendingPathComponent("HonyakuStoreTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: folder)
+    }
+
+    func testHistoryFromBeforeModesStillLoads() throws {
+        let file = folder.appendingPathComponent("history.json")
+        let old = """
+        [{"id":"0E5C1D2A-7B8C-4D3E-9F10-112233445566","rawText":"um hello","cleanedText":"Hello.",\
+        "timestamp":780000000,"modelTier":"parakeet-tdt-v2","durationSeconds":1.5,"hasSpeakerLabels":false}]
+        """
+        try Data(old.utf8).write(to: file)
+
+        let store = TranscriptStore(fileURL: file)
+        XCTAssertEqual(store.entries.count, 1)
+        XCTAssertEqual(store.entries.first?.cleanedText, "Hello.")
+        XCTAssertNil(store.entries.first?.mode)
+        XCTAssertNil(store.entries.first?.appBundleID)
+    }
+
+    func testNewFieldsRoundTripWithRestrictivePermissions() throws {
+        let file = folder.appendingPathComponent("history.json")
+        let store = TranscriptStore(fileURL: file)
+        store.save(TranscriptEntry(rawText: "hi", cleanedText: "Hi.", modelTier: "parakeet-tdt-v2",
+                                   durationSeconds: 1, mode: "dictate", appBundleID: "com.apple.Terminal"))
+
+        let reloaded = TranscriptStore(fileURL: file)
+        XCTAssertEqual(reloaded.entries.first?.mode, "dictate")
+        XCTAssertEqual(reloaded.entries.first?.appBundleID, "com.apple.Terminal")
+        let perms = try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int
+        XCTAssertEqual(perms, 0o600)
+    }
+}

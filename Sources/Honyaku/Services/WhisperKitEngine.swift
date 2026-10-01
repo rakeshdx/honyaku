@@ -11,7 +11,7 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
         self.kit = kit
     }
 
-    func transcribe(audioURL: URL, samples16k: [Float]?) async throws -> TranscriptionResult {
+    func transcribe(audioURL: URL, samples16k: [Float]?, hints: SpeechHints) async throws -> TranscriptionResult {
         // Read per dictation so a change in Settings applies at once
         let language = UserDefaults.standard.string(forKey: TranscriptionService.dictationLanguageKey)
             .flatMap { $0.isEmpty ? nil : $0 }  // Settings stores Auto-detect as ""

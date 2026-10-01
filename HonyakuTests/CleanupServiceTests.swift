@@ -134,3 +134,51 @@ final class CleanupPromptAssemblyTests: XCTestCase {
         XCTAssertFalse(CleanupService.defaultPrompt.contains("[Speaker"))
     }
 }
+
+final class CleanupRequestTests: XCTestCase {
+    private let base = CleanupService.defaultPrompt
+
+    func testRequestWithoutRulesMatchesTheOldPrompt() {
+        let request = CleanupRequest(systemPrompt: base)
+        XCTAssertEqual(CleanupService.systemPrompt(for: request, transcript: "hello"), base)
+        XCTAssertEqual(CleanupService.systemPrompt(for: request, transcript: "[Speaker 1] hi"),
+                       CleanupService.prompt(base, for: "[Speaker 1] hi"))
+    }
+
+    func testExtraRulesFollowTheLabelRuleOnTheirOwnLines() {
+        let request = CleanupRequest(systemPrompt: "Base", extraRules: ["Rule A", "Rule B"])
+        XCTAssertEqual(CleanupService.systemPrompt(for: request, transcript: "hi"), "Base\nRule A\nRule B")
+        XCTAssertEqual(CleanupService.systemPrompt(for: request, transcript: "[Speaker 1] hi"),
+                       "Base\n\(CleanupService.speakerLabelRule)\nRule A\nRule B")
+    }
+
+    func testDefaultsAreStrictWithTheUsualTokenCap() {
+        let request = CleanupRequest(systemPrompt: base)
+        XCTAssertEqual(request.faithfulness, .strict)
+        XCTAssertNil(request.maxTokens)
+        XCTAssertTrue(request.englishFillers)
+        XCTAssertTrue(request.extraRules.isEmpty)
+    }
+
+    func testEmptyOutputKeepsTheTranscript() {
+        XCTAssertEqual(CleanupService.accept("", raw: "hello there", request: CleanupRequest(systemPrompt: base)),
+                       "hello there")
+    }
+
+    func testStrictRequestRejectsChangedWords() {
+        let request = CleanupRequest(systemPrompt: base)
+        XCTAssertEqual(CleanupService.accept("I disagree.", raw: "um I think so", request: request), "I think so")
+        XCTAssertEqual(CleanupService.accept("I think so.", raw: "um I think so", request: request), "I think so.")
+    }
+
+    func testStrictNonEnglishRequestFallsBackToTheTranscriptUnchanged() {
+        let request = CleanupRequest(systemPrompt: base, englishFillers: false)
+        XCTAssertEqual(CleanupService.accept("Anders.", raw: "um ein Beispiel", request: request), "um ein Beispiel")
+    }
+
+    func testRequestWithoutFaithfulnessKeepsTheModelsText() {
+        let request = CleanupRequest(systemPrompt: base, faithfulness: .none)
+        XCTAssertEqual(CleanupService.accept("Summary: ship it\n- today", raw: "we ship it today", request: request),
+                       "Summary: ship it\n- today")
+    }
+}
