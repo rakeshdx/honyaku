@@ -54,7 +54,7 @@ static func decide(focusedSubrole: String?,       // nil when unreadable
 
 **Rules, in order:**
 1. `focusedSubrole == "AXSecureTextField"` → **block**.
-2. Secure input is on and owned by the front app (`owner == frontmostPID`) → **block**. Exception: when the front app is a terminal → **warn** (see 1a).
+2. Secure input is on and owned by the front app (`owner == frontmostPID`) → **block**. Exception: when the front app is a terminal → **allow**, with no notice (see 1a).
 3. Secure input is on but owned by another app, or the owner is unknown → **warn**. The paste goes ahead.
 4. Otherwise → **allow**. This includes an unreadable subrole: fail open.
 
@@ -70,13 +70,13 @@ static func decide(focusedSubrole: String?,       // nil when unreadable
 
 The guard runs **before** the "Honyaku in front" check. Honyaku's own Hugging Face token field is a `SecureField`, so text dictated into it is blocked rather than saved to History.
 
-#### 1a. Terminals with Secure Keyboard Entry (needs confirmation)
+#### 1a. Terminals with Secure Keyboard Entry (decided: Q35)
 
 Terminal and iTerm2 "Secure Keyboard Entry" turns secure input on whenever the terminal is active. Under decision Q27 as written ("secure input owned by the frontmost app → block"), anyone with that setting on could never dictate into their terminal.
 
-**Proposed:** for apps in the Terminals category, secure input owned by the terminal is a **warn**, not a block. The terminal's own `AXSecureTextField` doesn't exist, so a `sudo` password prompt can't be detected either way. The Apps tab footer says so: "Terminals can't report password prompts. Don't dictate passwords."
+**Decided (Q35, 2026-10-01):** for apps in the Terminals category, secure input owned by the terminal is ignored: the text is pasted and saved as normal, with no notice. A notice on every dictation would only be noise. The terminal's own `AXSecureTextField` doesn't exist, so a `sudo` password prompt can't be detected either way. The Apps tab footer says so: "Terminals can't report password prompts. Don't dictate passwords."
 
-This refines Q27 and is flagged for the user to confirm before implementation.
+This refines Q27; the user confirmed it.
 
 ### 2. Formatting rules
 
@@ -178,7 +178,7 @@ The guard and the target app are read once, together, right before step 2, so th
 - **UI test:** the Apps tab opens, and adding an override from the running apps lists it.
 - **Manual:**
   - a Safari password field: blocked and not saved
-  - Terminal with Secure Keyboard Entry on: a paste with a notice
+  - Terminal with Secure Keyboard Entry on: pasted and saved, no notice
   - Slack: paste, fail open
   - checking whether the push-to-talk listener still fires while secure input is on
 

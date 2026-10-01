@@ -4,7 +4,8 @@
 Right before every paste, the system SHALL check the focused text field and the system secure-input state, and SHALL:
 - **block** the paste when the focused element's subrole is `AXSecureTextField`;
 - **block** the paste when secure input is on and owned by the app that would receive the text, unless that app is in the Terminals category;
-- **warn and paste** when secure input is on but owned by another app, by an unknown app, or by a terminal that is in front (for example with Secure Keyboard Entry on);
+- **paste with no notice** when secure input is on and owned by a terminal that is in front (for example with Secure Keyboard Entry on);
+- **warn and paste** when secure input is on but owned by another app or by an unknown app;
 - **paste** when the field's type can't be read (fail open).
 
 A blocked transcript SHALL NOT be written to the pasteboard, pasted or saved to history. The status SHALL read "Not pasted: a password field is focused". The status SHALL NOT include the transcript, and the transcript SHALL NOT be logged.
@@ -33,7 +34,7 @@ The system SHALL NOT set `AXManualAccessibility` or any other attribute on other
 #### Scenario: Terminal with Secure Keyboard Entry
 - **GIVEN** Terminal is in front with Secure Keyboard Entry turned on
 - **WHEN** a dictation finishes
-- **THEN** the text is pasted with the secure-input notice, because a terminal's secure input doesn't indicate a password field
+- **THEN** the text is pasted and saved to history as normal, with no notice, because a terminal's secure input doesn't indicate a password field
 
 #### Scenario: The field type can't be read
 - **GIVEN** Slack is in front and exposes no focused field to accessibility

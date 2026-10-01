@@ -1,7 +1,7 @@
 ## 1. Prepare
 
 - [ ] 1.1 Rebase onto main after dictation-stages and custom-vocabulary merge; adopt the merged names (`DictationContext`, `AppCategory`, `TextStage`, injectable pipeline) and update design.md where they differ
-- [ ] 1.2 Confirm the Terminals secure-input exception (design 1a) with the user before implementing the guard
+- [x] 1.2 Confirm the Terminals secure-input exception (design 1a) with the user before implementing the guard (Q35: paste and save, no notice)
 
 ## 2. Rules and store
 
@@ -35,4 +35,4 @@
 - [ ] 6.1 `xcodegen generate`; clean build with no warnings in project code (through the shared build lock)
 - [ ] 6.2 Unit tests and the HonyakuUITests scheme pass (through the shared build lock)
 - [ ] 6.3 `openspec validate per-app-behaviour --strict`
-- [ ] 6.4 Developer, by hand: Safari password field (blocked, not saved); Terminal with Secure Keyboard Entry (pasted with notice); Slack (pasted); terminal one-line and no full stop; does push-to-talk still fire while secure input is on?
+- [ ] 6.4 Developer, by hand: Safari password field (blocked, not saved); Terminal with Secure Keyboard Entry (pasted and saved, no notice); Slack (pasted); terminal one-line and no full stop; does push-to-talk still fire while secure input is on?
