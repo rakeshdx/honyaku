@@ -76,11 +76,13 @@ final class PipelineStagesTests: XCTestCase {
         XCTAssertEqual(context.pasteOffNotice, "paste is off")
     }
 
-    func testTheAppStartsWithNoStages() {
+    /// The app runs exactly what the feature slots contribute, in their order (whatever each feature adds).
+    func testTheAppRunsEachFeaturesStages() {
         let live = PipelineStages.live(environment)
-        XCTAssertTrue(live.preparers.isEmpty)
-        XCTAssertTrue(live.afterTranscription.isEmpty)
-        XCTAssertTrue(live.final.isEmpty)
+        let parts = [VocabularyStages.make(environment), RewriteStages.make(environment), PerAppStages.make(environment)]
+        XCTAssertEqual(live.preparers.count, parts.map(\.preparers.count).reduce(0, +))
+        XCTAssertEqual(live.afterTranscription.count, parts.map(\.afterTranscription.count).reduce(0, +))
+        XCTAssertEqual(live.final.count, parts.map(\.final.count).reduce(0, +))
     }
 
     func testCombinedKeepsEachFeaturesOrder() {

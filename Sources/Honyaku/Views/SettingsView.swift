@@ -494,6 +494,7 @@ private struct HistoryRow: View {
     let entry: TranscriptEntry
     let onDelete: () -> Void
     @State private var copied = false
+    @State private var addingToVocabulary = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -513,6 +514,11 @@ private struct HistoryRow: View {
                     }
                     .help("Copy")
                     .accessibilityLabel(copied ? "Copied" : "Copy")
+                    Button { addingToVocabulary = true } label: {
+                        Image(systemName: "character.book.closed")
+                    }
+                    .help("Add to vocabulary\u{2026}")
+                    .accessibilityLabel("Add to vocabulary")
                     Button(role: .destructive, action: onDelete) {
                         Image(systemName: "trash")
                     }
@@ -526,8 +532,10 @@ private struct HistoryRow: View {
         .padding(.vertical, 4)
         .contextMenu {
             Button("Copy", action: copy)
+            Button("Add to vocabulary\u{2026}") { addingToVocabulary = true }
             Button("Delete", role: .destructive, action: onDelete)
         }
+        .addToVocabularySheet(transcript: entry.cleanedText, isPresented: $addingToVocabulary)
     }
 
     private func copy() {
