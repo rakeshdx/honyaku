@@ -23,3 +23,9 @@
 ## 5. By hand
 
 - [ ] 5.1 Relaunch Honyaku with Qwen3-4B selected: a short "Downloading Qwen3 4B" appears, `chat_template.jinja` lands in the model folder, and a dictation is cleaned up as before or better
+
+## 6. Tests use temporary model folders
+
+- [x] 6.1 `ModelDownloaderTests` download into a per-test temporary folder (`download(model:to:)`), never the user's models folder; the success test also checks the downloaded file
+- [x] 6.2 Audit: no other unit or UI test writes to the models folder (installer tests inject the install step; the others already use temporary folders); integration tests only read it
+- [x] 6.3 Gates: clean build with no warnings in project sources; 198 unit tests with the models folder's `_test_` count (150) and `history.json` unchanged before and after; 4 UI tests; `openspec validate --strict`

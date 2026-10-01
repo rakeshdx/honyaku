@@ -1,7 +1,18 @@
 import XCTest
 @testable import Honyaku
 
+/// Every download goes into a temporary folder: the tests never write to the user's models folder.
 final class ModelDownloaderTests: XCTestCase {
+    private var root: URL!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appending(path: "honyaku-downloader-test-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
 
     func testSuccessfulDownloadMarksModelDownloaded() async throws {
         let downloader = ModelDownloader(session: makeMockSession(data: Data("fake model".utf8), statusCode: 200))
@@ -19,8 +30,9 @@ final class ModelDownloaderTests: XCTestCase {
             notes: model.notes,
             sha256Checksums: [:]
         )
-        // Should complete without throwing
-        try await downloader.download(model: noChecksumModel) { _ in }
+        let folder = root.appending(path: noChecksumModel.id)
+        try await downloader.download(model: noChecksumModel, to: folder) { _ in }
+        XCTAssertEqual(try String(contentsOf: folder.appending(path: "test.bin"), encoding: .utf8), "fake model")
     }
 
     func testChecksumMismatchThrowsError() async throws {
@@ -38,7 +50,7 @@ final class ModelDownloaderTests: XCTestCase {
             sha256Checksums: ["test.bin": "0000000000000000000000000000000000000000000000000000000000000000"]
         )
         do {
-            try await downloader.download(model: model) { _ in }
+            try await downloader.download(model: model, to: root.appending(path: model.id)) { _ in }
             XCTFail("Expected checksumMismatch error")
         } catch ModelDownloadError.checksumMismatch {
             // Expected
@@ -60,7 +72,7 @@ final class ModelDownloaderTests: XCTestCase {
             sha256Checksums: [:]
         )
         do {
-            try await downloader.download(model: model) { _ in }
+            try await downloader.download(model: model, to: root.appending(path: model.id)) { _ in }
             XCTFail("Expected downloadFailed error")
         } catch ModelDownloadError.downloadFailed {
             // Expected
@@ -82,8 +94,7 @@ final class ModelDownloaderTests: XCTestCase {
     }
 
     func testOnlyMissingFilesAreFetched() throws {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "honyaku-downloader-test-\(UUID())")
-        defer { try? FileManager.default.removeItem(at: folder) }
+        let folder = root.appending(path: "model")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try Data("weights".utf8).write(to: folder.appending(path: "model.safetensors"))
         try Data().write(to: folder.appending(path: "config.json"))  // empty: an unfinished file
@@ -92,8 +103,7 @@ final class ModelDownloaderTests: XCTestCase {
     }
 
     func testRepairDownloadsOnlyTheMissingFile() async throws {
-        let folder = FileManager.default.temporaryDirectory.appending(path: "honyaku-downloader-test-\(UUID())")
-        defer { try? FileManager.default.removeItem(at: folder) }
+        let folder = root.appending(path: "model")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let weights = Data("existing weights".utf8)
         try weights.write(to: folder.appending(path: "model.safetensors"))

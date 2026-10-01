@@ -54,6 +54,10 @@ Offline, each dictation pastes the uncleaned words and the download error is sho
 
 **Alternative considered:** keep cleaning up with the plain-text fallback until the repair finishes. Rejected, because a degraded prompt would quietly lower quality, and rewrites in particular would suffer.
 
+### 6. Tests use temporary model folders
+
+`ModelDownloaderTests` called `download(model:)`, whose destination is the user's real models folder, so every unit-test run left `cleanup/*_test_*` folders in `~/Library/Application Support/Honyaku/Models` (150 on the developer's Mac). Each test now downloads into its own temporary folder through the existing `download(model:to:)`, created in `setUp` and removed in `tearDown`. The network is always the mock `URLProtocol`. This follows the requirement "Tests never touch the user's real data" (change `dictation-stages`); no production code changes. The leftover folders already on disk aren't deleted by this change.
+
 ## Risks / Trade-offs
 
 - **A file on disk that's present but corrupt is never fetched again.** This was already the case for MLX, which has no checksums and never had a forced path. Deleting the model in Settings and downloading it again recovers.
