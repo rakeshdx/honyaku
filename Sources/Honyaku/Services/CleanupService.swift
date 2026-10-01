@@ -29,6 +29,10 @@ struct CleanupRequest: Equatable, Sendable {
     /// Vocabulary terms strict output must keep exactly: as many occurrences as the input has, with the same
     /// letter case and characters such as "+" that the word comparison ignores.
     var protectedTerms: [String] = []
+    /// The line above the framed transcript in the user message.
+    var transcriptLabel = CleanupService.transcriptLabel
+    /// Added to the system prompt when the transcript has `[Speaker N]` labels; nil adds nothing.
+    var speakerLabelRule: String? = CleanupService.speakerLabelRule
 }
 
 actor CleanupService: CleanupServiceProtocol {
@@ -63,21 +67,26 @@ actor CleanupService: CleanupServiceProtocol {
     /// answer "[Speaker 1]" to ordinary sentences.
     static let speakerLabelRule = "Keep every [Speaker N] label exactly as it appears."
 
-    static func prompt(_ base: String, for transcript: String) -> String {
-        transcript.contains("[Speaker ") ? base + "\n" + speakerLabelRule : base
+    static let transcriptLabel = "Transcript to clean:"
+
+    static func prompt(_ base: String, for transcript: String, labelRule: String? = speakerLabelRule) -> String {
+        guard let labelRule, transcript.contains("[Speaker ") else { return base }
+        return base + "\n" + labelRule
     }
 
-    /// The system prompt for `request`: the speaker-label rule when the transcript has labels, then each
-    /// extra rule on its own line.
+    /// The system prompt for `request`: the request's speaker-label rule when the transcript has labels, then
+    /// each extra rule on its own line.
     static func systemPrompt(for request: CleanupRequest, transcript: String) -> String {
-        ([prompt(request.systemPrompt, for: transcript)] + request.extraRules).joined(separator: "\n")
+        ([prompt(request.systemPrompt, for: transcript, labelRule: request.speakerLabelRule)] + request.extraRules)
+            .joined(separator: "\n")
     }
 
-    /// The text to use for the model's `output`: the transcript when the output is empty, or when a strict
-    /// request's output changed the transcript's words.
+    /// The text to use for the model's `output`. A strict request gets the transcript back when the output is
+    /// empty or changed the transcript's words; any other request gets the output as it is, even empty, so the
+    /// caller can tell a failure.
     static func accept(_ output: String, raw rawText: String, request: CleanupRequest) -> String {
-        if output.isEmpty { return rawText }
         guard request.faithfulness == .strict else { return output }
+        if output.isEmpty { return rawText }
         // Never trust the model with the user's words: if it lost or added any, keep theirs
         guard isFaithful(raw: rawText, cleaned: output, englishFillers: request.englishFillers),
               keepsTerms(request.protectedTerms, raw: rawText, cleaned: output) else {
@@ -111,6 +120,7 @@ actor CleanupService: CleanupServiceProtocol {
             group.addTask {
                 let output = try await CleanupService.modelOutput(
                     for: rawText, prompt: CleanupService.systemPrompt(for: request, transcript: rawText),
+                    label: request.transcriptLabel,
                     maxTokens: request.maxTokens ?? CleanupService.outputTokenLimit(for: rawText),
                     model: model, info: info, reuse: promptCache)
                 return CleanupService.accept(output, raw: rawText, request: request)
@@ -136,21 +146,24 @@ actor CleanupService: CleanupServiceProtocol {
     func modelOutput(for rawText: String, prompt: String) async throws -> String {
         let (model, info) = try await loadModel()
         return try await CleanupService.modelOutput(for: rawText, prompt: CleanupService.prompt(prompt, for: rawText),
+                                                    label: CleanupService.transcriptLabel,
                                                     maxTokens: CleanupService.outputTokenLimit(for: rawText),
                                                     model: model, info: info, reuse: promptCache)
     }
 
-    private static func modelOutput(for rawText: String, prompt: String, maxTokens: Int, model: ModelContainer,
-                                    info: ModelInfo, reuse: PromptPrefixCache) async throws -> String {
+    private static func modelOutput(for rawText: String, prompt: String, label: String, maxTokens: Int,
+                                    model: ModelContainer, info: ModelInfo,
+                                    reuse: PromptPrefixCache) async throws -> String {
         // Qwen3 reasons before answering unless its chat template is told not to
         let templateContext: [String: any Sendable]? = info.disablesThinking ? ["enable_thinking": false] : nil
         let parameters = GenerateParameters(maxTokens: maxTokens, temperature: 0)
-        let cacheKey = "\(info.id)\n\(info.disablesThinking)\n\(prompt)"
+        let cacheKey = "\(info.id)\n\(info.disablesThinking)\n\(label)\n\(prompt)"
 
         let generation = reuse.generation
         let response: String = try await model.perform { context in
             func tokens(for transcript: String) async throws -> [Int] {
-                let input = UserInput(chat: [.system(prompt), .user(frame(transcript))], additionalContext: templateContext)
+                let input = UserInput(chat: [.system(prompt), .user(frame(transcript, label: label))],
+                                      additionalContext: templateContext)
                 return try await context.processor.prepare(input: input).text.tokens.asArray(Int.self)
             }
             let full = try await tokens(for: rawText)
@@ -195,8 +208,8 @@ actor CleanupService: CleanupServiceProtocol {
     }
 
     /// Framed as data: a bare question like "Are you working or not?" otherwise gets answered or rewritten.
-    private static func frame(_ transcript: String) -> String {
-        "Transcript to clean:\n\"\"\"\n\(transcript)\n\"\"\""
+    private static func frame(_ transcript: String, label: String) -> String {
+        "\(label)\n\"\"\"\n\(transcript)\n\"\"\""
     }
 
     /// Cleanup only deletes words, so output needs about as many tokens as the input; the cap stops a

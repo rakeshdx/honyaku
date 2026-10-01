@@ -10,6 +10,8 @@ final class StatusItemController: NSObject {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let onOpen: () -> Void
     private let onSettings: () -> Void
+    /// Items between "Settings…" and the separator above Quit, such as "Rewrite as".
+    private let extraItems: [NSMenuItem]
     private lazy var menu: NSMenu = {
         let menu = NSMenu()
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
@@ -17,6 +19,7 @@ final class StatusItemController: NSObject {
         // Identifiers tell this menu apart from the app's main menu, which has the same titles (UI tests)
         settings.identifier = NSUserInterfaceItemIdentifier("statusMenu.settings")
         menu.addItem(settings)
+        for extra in extraItems { menu.addItem(extra) }
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit Honyaku", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
@@ -25,9 +28,10 @@ final class StatusItemController: NSObject {
         return menu
     }()
 
-    init(onOpen: @escaping () -> Void, onSettings: @escaping () -> Void) {
+    init(onOpen: @escaping () -> Void, onSettings: @escaping () -> Void, extraItems: [NSMenuItem] = []) {
         self.onOpen = onOpen
         self.onSettings = onSettings
+        self.extraItems = extraItems
         super.init()
         guard let button = item.button else { return }
         button.target = self
@@ -47,8 +51,9 @@ final class StatusItemController: NSObject {
         }
     }
 
-    /// What VoiceOver reads after "Honyaku".
-    nonisolated static func accessibilityValue(for status: AppStatus) -> String {
+    /// What VoiceOver reads after "Honyaku". `rewriting` is true while a rewrite is in progress.
+    nonisolated static func accessibilityValue(for status: AppStatus, rewriting: Bool = false) -> String {
+        if rewriting, status == .transcribing || status == .processing { return "Rewriting" }
         switch status {
         case .idle: return "Ready"
         case .recording: return "Recording"
@@ -58,11 +63,11 @@ final class StatusItemController: NSObject {
         }
     }
 
-    func update(for status: AppStatus) {
+    func update(for status: AppStatus, rewriting: Bool = false) {
         let image = NSImage(systemSymbolName: Self.symbol(for: status), accessibilityDescription: "Honyaku")
         image?.isTemplate = true
         item.button?.image = image
-        item.button?.setAccessibilityValue(Self.accessibilityValue(for: status))
+        item.button?.setAccessibilityValue(Self.accessibilityValue(for: status, rewriting: rewriting))
     }
 
     @objc private func clicked() {
@@ -139,7 +144,7 @@ final class HostedWindow: NSObject, NSWindowDelegate {
 @MainActor
 final class SettingsWindowController: NSObject {
     enum Tab: String, CaseIterable {
-        case general, models, dictation, vocabulary, apps, history, privacy
+        case general, models, dictation, vocabulary, rewrite, apps, history, privacy
 
         var title: String {
             switch self {
@@ -147,6 +152,7 @@ final class SettingsWindowController: NSObject {
             case .models: return "Models"
             case .dictation: return "Dictation"
             case .vocabulary: return "Vocabulary"
+            case .rewrite: return "Rewrite"
             case .apps: return "Apps"
             case .history: return "History"
             case .privacy: return "Privacy"
@@ -159,6 +165,7 @@ final class SettingsWindowController: NSObject {
             case .models: return "square.stack.3d.up"
             case .dictation: return "text.bubble"
             case .vocabulary: return "character.book.closed"
+            case .rewrite: return "wand.and.stars"
             case .apps: return "square.grid.2x2"
             case .history: return "clock"
             case .privacy: return "lock"
@@ -168,6 +175,9 @@ final class SettingsWindowController: NSObject {
 
     /// Remembers the last tab across launches.
     static let lastTabKey = "settingsTab"
+    /// Posted with a `Tab` raw value as its object to switch the open Settings window to that tab
+    /// (e.g. the Rewrite tab's button to the Models tab).
+    static let showTabNotification = Notification.Name("HonyakuShowSettingsTab")
 
     private unowned let coordinator: AppCoordinator
     private var window: NSWindow?
@@ -216,6 +226,7 @@ final class SettingsWindowController: NSObject {
             case .models: ModelsSettings()
             case .dictation: DictationSettings()
             case .vocabulary: VocabularySettings()
+            case .rewrite: RewriteSettingsView()
             case .apps: AppsSettings()
             case .history: HistorySettings()
             case .privacy: PrivacySettings()
@@ -227,6 +238,18 @@ final class SettingsWindowController: NSObject {
 /// Resizes the window to each tab's own size, and remembers the last tab chosen.
 private final class SettingsTabViewController: NSTabViewController {
     var defaults: UserDefaults = .standard
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        NotificationCenter.default.addObserver(forName: SettingsWindowController.showTabNotification, object: nil,
+                                               queue: .main) { [weak self] note in
+            MainActor.assumeIsolated {
+                guard let self, let id = note.object as? String,
+                      let index = self.tabViewItems.firstIndex(where: { $0.identifier as? String == id }) else { return }
+                self.selectedTabViewItemIndex = index
+            }
+        }
+    }
 
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)

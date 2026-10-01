@@ -85,6 +85,13 @@ final class PipelineStagesTests: XCTestCase {
         XCTAssertEqual(live.final.count, parts.map(\.final.count).reduce(0, +))
     }
 
+    /// Rewrite's own stages are in the live list.
+    func testTheAppRunsRewritesStages() {
+        let live = PipelineStages.live(environment)
+        XCTAssertEqual(live.preparers.filter { $0 is RewritePlanner }.count, 1)
+        XCTAssertEqual(live.final.filter { $0 is TerminalOneLine }.count, 1)
+    }
+
     func testCombinedKeepsEachFeaturesOrder() {
         let first = PipelineStages(final: [SuffixStage(suffix: "a")])
         let second = PipelineStages(afterTranscription: [SuffixStage(suffix: "b")], final: [SuffixStage(suffix: "c")])

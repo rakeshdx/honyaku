@@ -1,12 +1,14 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Registers a system-wide CGEventTap that activates push-to-talk on bare Control keydown.
-/// Uses flagsChanged events because Control is a modifier key — it never fires keyDown/keyUp.
+/// Registers a system-wide CGEventTap that activates push-to-talk on Control keydown (Control+Shift rewrites).
+/// Uses flagsChanged events because Control is a modifier key — it never fires keyDown/keyUp. Key and mouse
+/// presses are seen only to cancel a hold that turned into a shortcut: their type is read, nothing else.
 final class HotkeyService: HotkeyServiceProtocol {
     var onRecordingStarted: ((DictationMode) -> Void)?
     var onRecordingEnded: ((DictationMode) -> Void)?
     var onRecordingCancelled: (() -> Void)?
+    var onRewriteHint: (() -> Void)?
 
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -22,9 +24,27 @@ final class HotkeyService: HotkeyServiceProtocol {
         guard AXIsProcessTrusted() else {
             throw HotkeyError.accessibilityNotGranted
         }
-        // Modifier keys (Control, Shift, Option, Command) fire flagsChanged, NOT keyDown/keyUp
-        let mask: CGEventMask = (1 << CGEventType.flagsChanged.rawValue)
-        guard let tap = CGEvent.tapCreate(
+        // Modifier keys (Control, Shift, Option, Command) fire flagsChanged, NOT keyDown/keyUp. If macOS refuses
+        // the key and mouse events, push-to-talk still works, just without cancelling on a shortcut
+        guard let tap = makeTap(mask: Self.fullMask) ?? makeTap(mask: Self.modifiersMask) else {
+            throw HotkeyError.tapCreationFailed
+        }
+
+        eventTap = tap
+        runLoopSource = CFMachPortCreateRunLoopSource(nil, tap, 0)
+        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+    }
+
+    static let modifiersMask: CGEventMask = 1 << CGEventType.flagsChanged.rawValue
+    static let fullMask: CGEventMask = modifiersMask
+        | (1 << CGEventType.keyDown.rawValue)
+        | (1 << CGEventType.leftMouseDown.rawValue)
+        | (1 << CGEventType.rightMouseDown.rawValue)
+        | (1 << CGEventType.otherMouseDown.rawValue)
+
+    private func makeTap(mask: CGEventMask) -> CFMachPort? {
+        CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
             options: .defaultTap,
@@ -34,14 +54,7 @@ final class HotkeyService: HotkeyServiceProtocol {
                 return service.handle(proxy: proxy, type: type, event: event)
             },
             userInfo: Unmanaged.passUnretained(self).toOpaque()
-        ) else {
-            throw HotkeyError.tapCreationFailed
-        }
-
-        eventTap = tap
-        runLoopSource = CFMachPortCreateRunLoopSource(nil, tap, 0)
-        CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
+        )
     }
 
     func stop() {
@@ -65,36 +78,50 @@ final class HotkeyService: HotkeyServiceProtocol {
             _ = apply(flags: CGEventSource.flagsState(.combinedSessionState))
             return Unmanaged.passUnretained(event)
         }
-        guard type == .flagsChanged else {
+        let action: PushToTalkGesture.Action
+        switch type {
+        case .flagsChanged:
+            return apply(flags: event.flags) ? nil : Unmanaged.passUnretained(event)
+        case .keyDown:
+            // Only the type is read: never the key code or characters. While idle this returns at once
+            action = gesture.keyDown()
+        case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+            action = gesture.mouseDown()
+        default:
             return Unmanaged.passUnretained(event)
         }
-        return apply(flags: event.flags) ? nil : Unmanaged.passUnretained(event)
+        // A key or click never changes a recording's start or end, only cancels it; the event always reaches the app
+        if action != .passThrough { fire(action) }
+        return Unmanaged.passUnretained(event)
     }
 
     /// Runs the gesture for a modifier state and fires the matching callback. Returns true to swallow the event.
     private func apply(flags: CGEventFlags) -> Bool {
-        let action = gesture.controlChanged(
-            controlDown: flags.contains(.maskControl),
-            otherModifiers: flags.contains(.maskCommand) || flags.contains(.maskAlternate) || flags.contains(.maskShift),
+        let action = gesture.flagsChanged(
+            control: flags.contains(.maskControl),
+            shift: flags.contains(.maskShift),
+            commandOrOption: flags.contains(.maskCommand) || flags.contains(.maskAlternate),
             now: Date(),
             pipelineBusy: isPipelineBusy()
         )
+        fire(action)
+        // Control's own press and release are kept from other apps
+        return action.swallowsEvent
+    }
 
+    private func fire(_ action: PushToTalkGesture.Action) {
         switch action {
-        case .start:
-            DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?(.dictate) }
-            return true  // suppress bare Control from reaching other apps
-        case .end:
-            DispatchQueue.main.async { [weak self] in self?.onRecordingEnded?(.dictate) }
-            return true
+        case .start(let mode):
+            DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?(mode) }
+        case .end(let mode):
+            DispatchQueue.main.async { [weak self] in self?.onRecordingEnded?(mode) }
         case .cancel:
-            // Too short to transcribe — still stop capture so the mic is released
+            // Too short, or a shortcut: still stop capture so the mic is released
             DispatchQueue.main.async { [weak self] in self?.onRecordingCancelled?() }
-            return true
-        case .suppress:
-            return true
-        case .passThrough:
-            return false
+        case .rewriteHint:
+            DispatchQueue.main.async { [weak self] in self?.onRewriteHint?() }
+        case .suppress, .passThrough:
+            break
         }
     }
 }

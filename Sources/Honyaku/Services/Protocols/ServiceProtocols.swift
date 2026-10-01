@@ -52,6 +52,8 @@ protocol HotkeyServiceProtocol: AnyObject {
     /// The mode the gesture ended in, which wins over the one it started in.
     var onRecordingEnded: ((DictationMode) -> Void)? { get set }
     var onRecordingCancelled: (() -> Void)? { get set }
+    /// Shift joined a hold that started as dictation: it will end as a rewrite unless it's cancelled.
+    var onRewriteHint: (() -> Void)? { get set }
     func start() throws
     func stop()
 }

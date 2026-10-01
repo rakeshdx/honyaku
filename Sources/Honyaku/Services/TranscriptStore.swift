@@ -41,7 +41,12 @@ final class TranscriptStore: ObservableObject {
     static func filter(_ entries: [TranscriptEntry], matching query: String) -> [TranscriptEntry] {
         let trimmed = query.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return entries }
-        return entries.filter { $0.cleanedText.range(of: trimmed, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+        let options: String.CompareOptions = [.caseInsensitive, .diacriticInsensitive]
+        return entries.filter {
+            $0.cleanedText.range(of: trimmed, options: options) != nil
+                // A rewrite also matches the words that were spoken
+                || ($0.rewriteTemplateID != nil && $0.rawText.range(of: trimmed, options: options) != nil)
+        }
     }
 
     func clearAll() {

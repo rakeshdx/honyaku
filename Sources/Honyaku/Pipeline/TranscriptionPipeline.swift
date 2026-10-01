@@ -138,6 +138,9 @@ final class TranscriptionPipeline {
     /// The current recording's context, captured when it started.
     private var recordingContext: DictationContext?
 
+    /// The app in front when the current recording started (the rewrite template is chosen for it).
+    var recordingAppAtStart: TargetApp? { recordingContext?.appAtStart }
+
     func startRecording(mode: DictationMode = .dictate) {
         guard !appState.status.isBusy else { return }
         // Clear any prior error so Control key works again after a failed pipeline run
@@ -258,8 +261,11 @@ final class TranscriptionPipeline {
         // Step 3: Cleanup (optional)
         var finalText = await llmStage(labeledText, context: &context)
 
-        // In English, um/umm/uh/hmm are never content, whatever the model (or no model) left in
-        if context.englishFillers { finalText = CleanupService.removeUnambiguousFillers(finalText) }
+        // In English, um/umm/uh/hmm are never content, whatever the model (or no model) left in. Not for a
+        // rewrite's output: the pass collapses whitespace, which would join its sections
+        if context.englishFillers, context.mode != .rewrite {
+            finalText = CleanupService.removeUnambiguousFillers(finalText)
+        }
 
         // Decided now, not when the recording started: the user may have closed first run or brought
         // Honyaku forward while this was transcribing
@@ -306,7 +312,8 @@ final class TranscriptionPipeline {
             mode: context.mode.id,
             // Honyaku isn't where the text went when its own window was in front
             appBundleID: context.honyakuIsFrontmost ? nil : context.appAtPaste?.bundleID,
-            pasted: destination == .paste
+            pasted: destination == .paste,
+            rewriteTemplateID: context.rewrite?.template.rawValue
         )
         transcriptStore.save(entry)
         showNotices([routingNotice].compactMap { $0 } + context.notices)
@@ -319,12 +326,21 @@ final class TranscriptionPipeline {
         appState.setError(notices.joined(separator: " "))
     }
 
-    /// The model step: word-for-word cleanup when it's on and its model is installed; otherwise the text
-    /// as it is. Any failure falls back to the text it was given.
+    /// The model step: a rewrite for Control+Shift (whether or not cleanup is on); otherwise word-for-word
+    /// cleanup when it's on and its model is installed, or the text as it is. Any failure falls back to the
+    /// text it was given.
     private func llmStage(_ text: String, context: inout DictationContext) async -> String {
-        guard appState.cleanupEnabled else { return text }
         let cleanupModel = ModelRegistry.model(
             id: defaults.string(forKey: "selectedCleanupModelID") ?? appState.selectedCleanupModelID)
+        if context.mode == .rewrite {
+            // Without the Rewrite preparer (tests), the default template for the app the recording started in
+            let plan = context.rewrite
+                ?? RewritePlan(template: .automatic(for: context.appAtStart?.category ?? .other))
+            context.rewrite = plan
+            let installed = cleanupModel.map { models.isInstalled($0) } ?? false
+            return await RewriteStep.run(text, plan: plan, installed: installed, context: &context, cleanup: cleanup)
+        }
+        guard appState.cleanupEnabled else { return text }
         if let cleanupModel, !models.isInstalled(cleanupModel) {
             // Paste the speaker's words now; cleanup resumes once its model is downloaded
             models.startDownload(cleanupModel)

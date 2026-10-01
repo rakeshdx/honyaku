@@ -58,4 +58,32 @@ final class MenuBarUITests: XCTestCase {
         XCTAssertEqual(app.menuItems["statusMenu.settings"].title, "Settings…")
         app.typeKey(.escape, modifierFlags: [])
     }
+
+    func testRightClickMenuHasRewriteAs() throws {
+        statusItem().rightClick()
+        let rewriteAs = app.menuItems["statusMenu.rewrite"]
+        XCTAssertTrue(rewriteAs.waitForExistence(timeout: 2), "The icon's menu should have Rewrite as")
+        XCTAssertEqual(rewriteAs.title, "Rewrite as")
+        rewriteAs.hover()
+        let automatic = app.menuItems["statusMenu.rewrite.automatic"]
+        XCTAssertTrue(automatic.waitForExistence(timeout: 2))
+        XCTAssertEqual(automatic.title, "Automatic (by app)")
+        let templates = ["jiraTicket": "Jira ticket", "chatMessage": "Chat message", "email": "Email",
+                         "commitMessage": "Commit message", "prDescription": "PR description",
+                         "agentPrompt": "Coding-agent prompt", "standupUpdate": "Standup update"]
+        for (id, title) in templates {
+            XCTAssertEqual(app.menuItems["statusMenu.rewrite.\(id)"].title, title)
+        }
+        app.typeKey(.escape, modifierFlags: [])
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
+    func testSettingsHasARewriteTab() throws {
+        statusItem().click()
+        let rewriteTab = app.toolbars.buttons["Rewrite"].firstMatch
+        XCTAssertTrue(rewriteTab.waitForExistence(timeout: 3), "Settings should have a Rewrite tab")
+        rewriteTab.click()
+        let intro = app.staticTexts["Hold Control+Shift to rewrite what you say in a format for where it's going."]
+        XCTAssertTrue(intro.waitForExistence(timeout: 3), "The Rewrite tab should explain Control+Shift")
+    }
 }

@@ -1,14 +1,35 @@
 import Foundation
 
-/// Timing rules for the bare-Control push-to-talk gesture, kept free of CGEvent so they can be unit tested.
+/// Timing rules for the Control push-to-talk gesture, kept free of CGEvent so they can be unit tested.
 /// Every `.start` is eventually followed by `.end` or `.cancel`, so a recording is never left running.
+///
+/// A hold during which Shift was down at any moment is a rewrite; the mode is decided at release, so the
+/// order of Control and Shift doesn't matter. A key press, a click, or Command or Option during the hold
+/// means the user is using a Control shortcut: the hold is cancelled and its Control release swallowed.
 struct PushToTalkGesture {
+    enum CancelReason: Equatable {
+        case tooShort  // released under the minimum hold
+        case chord     // Command or Option joined the hold
+        case key       // a non-modifier key went down
+        case click     // a mouse button went down
+    }
+
     enum Action: Equatable {
-        case start        // begin recording; swallow the event
-        case end          // hold long enough — transcribe; swallow the event
-        case cancel       // released too soon — discard; swallow the event
-        case suppress     // swallow the event, no state change
-        case passThrough  // forward the event untouched
+        case start(DictationMode)  // begin recording; swallow the event
+        case end(DictationMode)    // held long enough: transcribe in this mode; swallow the event
+        case cancel(CancelReason)  // discard the recording; see `swallowsEvent`
+        case rewriteHint           // Shift seen for the first time in a hold that started as dictation
+        case suppress              // swallow the event, no state change
+        case passThrough           // forward the event untouched
+
+        /// Whether the event that produced this action is kept from the app in front. Only Control's own
+        /// press and release are swallowed; the key, click or modifier that cancels a hold reaches the app.
+        var swallowsEvent: Bool {
+            switch self {
+            case .start, .end, .suppress, .cancel(.tooShort): return true
+            case .cancel, .rewriteHint, .passThrough: return false
+            }
+        }
     }
 
     var minimumHoldSeconds: TimeInterval = 0.3
@@ -16,25 +37,87 @@ struct PushToTalkGesture {
     var staleAfterSeconds: TimeInterval = 5
 
     private(set) var keyDownTime: Date?
+    /// Shift was down at some point during the current hold.
+    private(set) var sawShift = false
+    /// The current Control hold was cancelled by a shortcut; its release is swallowed.
+    private(set) var cancelledHold = false
+    private var controlWasDown = false
+    private var shiftWasDown = false
 
-    mutating func controlChanged(controlDown: Bool, otherModifiers: Bool, now: Date, pipelineBusy: Bool) -> Action {
-        if controlDown && !otherModifiers {
-            if let t = keyDownTime {
-                // Clearing a stale press while busy would drop the key-up of an active hold
-                guard !pipelineBusy, now.timeIntervalSince(t) > staleAfterSeconds else {
-                    return .suppress  // repeat
-                }
-                keyDownTime = nil
-            }
-            guard !pipelineBusy else { return .passThrough }
-            keyDownTime = now
-            return .start
-
-        } else if !controlDown, let downTime = keyDownTime {
-            keyDownTime = nil
-            return now.timeIntervalSince(downTime) >= minimumHoldSeconds ? .end : .cancel
+    /// A modifier changed. Only Control, Shift, and whether Command or Option is down, are looked at.
+    mutating func flagsChanged(control: Bool, shift: Bool, commandOrOption: Bool, now: Date,
+                               pipelineBusy: Bool) -> Action {
+        let newPress = control && !controlWasDown
+        let shiftChanged = shift != shiftWasDown
+        defer {
+            controlWasDown = control
+            shiftWasDown = shift
         }
 
-        return .passThrough
+        if cancelledHold {
+            if !control {
+                // The release of a hold a shortcut cancelled: the app saw neither its press nor its release
+                cancelledHold = false
+                return .suppress
+            }
+            // Still the shortcut's hold, unless a release was missed and this is a new press
+            guard newPress else { return .passThrough }
+            cancelledHold = false
+        }
+
+        var clearedStalePress = false
+        if let downTime = keyDownTime {
+            if !control {
+                keyDownTime = nil
+                let mode: DictationMode = sawShift ? .rewrite : .dictate
+                sawShift = false
+                return now.timeIntervalSince(downTime) >= minimumHoldSeconds ? .end(mode) : .cancel(.tooShort)
+            }
+            if commandOrOption {
+                // Control+Command or Control+Option: a shortcut, not a dictation
+                cancelHold()
+                return .cancel(.chord)
+            }
+            if shiftChanged {
+                // Shift's own events reach the app. Pressed at any moment, it makes the hold a rewrite
+                guard shift, !sawShift else { return .passThrough }
+                sawShift = true
+                return .rewriteHint
+            }
+            // Control again (the other Control key, or Fn). Clearing a stale press while busy would drop the
+            // key-up of an active hold
+            guard !pipelineBusy, now.timeIntervalSince(downTime) > staleAfterSeconds else {
+                return .suppress  // repeat
+            }
+            keyDownTime = nil
+            sawShift = false
+            clearedStalePress = true
+        }
+
+        // Only Control's own press starts a recording: not Shift, Command or Option let go while it's held
+        guard control, !commandOrOption, !pipelineBusy, newPress || clearedStalePress else { return .passThrough }
+        keyDownTime = now
+        sawShift = shift
+        return .start(shift ? .rewrite : .dictate)
+    }
+
+    /// A non-modifier key went down. Only the fact is used, never which key.
+    mutating func keyDown() -> Action {
+        guard keyDownTime != nil else { return .passThrough }
+        cancelHold()
+        return .cancel(.key)
+    }
+
+    /// A mouse button went down. Only the fact is used, never where.
+    mutating func mouseDown() -> Action {
+        guard keyDownTime != nil else { return .passThrough }
+        cancelHold()
+        return .cancel(.click)
+    }
+
+    private mutating func cancelHold() {
+        keyDownTime = nil
+        sawShift = false
+        cancelledHold = true
     }
 }
