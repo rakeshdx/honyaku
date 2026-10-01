@@ -54,9 +54,9 @@ Type names here follow the groundwork plan; if the groundwork merges with differ
 - **Longest match first:** scanning left to right, at each position the longest candidate (by characters) wins. On a tie, the term higher in the list wins. Text that's been replaced is not scanned again (one pass), so a term's output can't trigger another rule.
 - **Speaker labels:** `[Speaker N]` labels are never altered.
 - **Speed:** the matcher is built once per list change. A one-minute transcript with 500 terms is corrected in under 5 ms on M1.
-- **Placement:** this is the first post-transcription stage. It runs on the raw transcript before speaker labels are merged in and before cleanup. As a result:
+- **Placement:** this is the first `afterTranscription` stage (groundwork `dictation-stages`, Decision 3). It runs after speaker labels are merged in, because the merge rebuilds the text, and before cleanup. As a result:
   - The faithfulness check compares against the corrected text, so cleanup output keeping "Paramount+" passes.
-  - History's raw text is the corrected text. The speech model's original output is not kept, since the user asked for these spellings.
+  - History's raw text keeps the speech model's original output (groundwork Decision 3). That's what makes "Add to vocabulary…" useful: the row shows how a word was misheard. The cleaned text has the corrected spellings.
   - Rewrites (`rewrite-modes`) start from corrected text.
 
 ### 3. Whisper hint
@@ -129,7 +129,6 @@ Type names here follow the groundwork plan; if the groundwork merges with differ
 - **An English glossary nudging multilingual output toward English.** Mitigated by sending the hint only for English and Auto-detect.
 - **A term that's also an ordinary word** (e.g. "Pluto") gets capitalised everywhere. This is accepted and documented in the footer copy: users control it by not listing such words.
 - **Over-eager heard-as spellings** (e.g. "jeera" → "Jira" in a cooking note). Accepted: the user chose the spelling, and can delete it.
-- **Raw history loses the speech model's original spelling.** Accepted. It's what the user asked for, and keeping both would double the history size for little value.
 
 ## Migration
 

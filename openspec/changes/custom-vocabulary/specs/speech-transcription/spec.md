@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Vocabulary corrections are applied to every transcript
-After transcription, and before speaker labels are merged in or cleanup runs, the system SHALL replace every match of a vocabulary term's "heard as" spellings, and of the term's own spelling in any letter case, with the term exactly as written in the vocabulary.
+After transcription and the speaker-label merge, and before cleanup runs, the system SHALL replace every match of a vocabulary term's "heard as" spellings, and of the term's own spelling in any letter case, with the term exactly as written in the vocabulary.
 - **Matching:**
   - It SHALL ignore letter case and SHALL treat curly and straight apostrophes as the same.
   - It SHALL match whole words or phrases only: no letter or digit directly before or after.
