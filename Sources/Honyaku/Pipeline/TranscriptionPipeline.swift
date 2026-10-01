@@ -291,8 +291,9 @@ final class TranscriptionPipeline {
             appState.firstRunTestTranscript = finalText
             return
         case .blocked(let notice):
-            // Nothing is pasted, saved or written to the pasteboard
-            showNotices([notice] + context.notices)
+            // Nothing is pasted, saved or written to the pasteboard. Only this notice: the run's others (a rewrite
+            // that fell back, say) would describe a paste that didn't happen
+            showNotices([notice])
             return
         case .saveOnly(let notice):
             routingNotice = notice
@@ -316,7 +317,8 @@ final class TranscriptionPipeline {
             rewriteTemplateID: context.rewrite?.template.rawValue
         )
         transcriptStore.save(entry)
-        showNotices([routingNotice].compactMap { $0 } + context.notices)
+        // Text that only went to History shows only that outcome's notice, for the same reason as a block
+        showNotices(routingNotice.map { [$0] } ?? context.notices)
     }
 
     /// Shows the run's messages once, at its end, the way errors are shown (orange, on the icon, the

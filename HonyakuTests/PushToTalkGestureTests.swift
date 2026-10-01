@@ -102,20 +102,22 @@ final class PushToTalkGestureTests: XCTestCase {
 
     // MARK: - Shortcuts cancel the hold
 
-    func testKeyPressCancelsAndSwallowsTheRelease() {
+    func testKeyPressCancelsAndPassesTheReleaseThrough() {
         // Control held for a second, then Ctrl+C
         _ = down(at: 0)
         XCTAssertEqual(gesture.keyDown(), .cancel(.key))
         XCTAssertFalse(PushToTalkGesture.Action.cancel(.key).swallowsEvent, "The C reaches the app")
         XCTAssertEqual(gesture.keyDown(), .passThrough, "A second Ctrl+C in the same hold is the app's")
-        XCTAssertEqual(up(at: 1.5), .suppress, "The release after a cancel is consumed")
+        XCTAssertEqual(up(at: 1.5), .passThrough,
+                       "The app saw Control in Ctrl+C's flags, so it must see the release too")
+        XCTAssertFalse(gesture.isHolding)
     }
 
     func testClickCancels() {
         _ = down(at: 0)
         XCTAssertEqual(gesture.mouseDown(), .cancel(.click))
         XCTAssertFalse(PushToTalkGesture.Action.cancel(.click).swallowsEvent)
-        XCTAssertEqual(up(at: 1), .suppress)
+        XCTAssertEqual(up(at: 1), .passThrough)
     }
 
     func testOptionDuringTheHoldCancels() {
@@ -123,7 +125,7 @@ final class PushToTalkGestureTests: XCTestCase {
         XCTAssertEqual(flags(at: 1, control: true, commandOrOption: true), .cancel(.chord))
         XCTAssertFalse(PushToTalkGesture.Action.cancel(.chord).swallowsEvent, "The Option event reaches the app")
         XCTAssertEqual(flags(at: 1.2, control: true), .passThrough, "Option let go, Control still held")
-        XCTAssertEqual(up(at: 2), .suppress)
+        XCTAssertEqual(up(at: 2), .passThrough)
     }
 
     func testControlShiftShortcutRunsNoRewrite() {
@@ -131,7 +133,7 @@ final class PushToTalkGestureTests: XCTestCase {
         XCTAssertEqual(flags(at: 0, control: true, shift: true), .start(.rewrite))
         XCTAssertEqual(gesture.keyDown(), .cancel(.key))
         XCTAssertEqual(flags(at: 0.5, control: true), .passThrough)
-        XCTAssertEqual(up(at: 0.6), .suppress)
+        XCTAssertEqual(up(at: 0.6), .passThrough)
     }
 
     func testCancelAppliesHoweverLongTheHold() {
@@ -152,8 +154,34 @@ final class PushToTalkGestureTests: XCTestCase {
         _ = down(at: 0)
         _ = gesture.keyDown()
         // The release never arrived (the tap was off); the state replay says Control is up, then a new press
-        XCTAssertEqual(up(at: 3), .suppress)
+        XCTAssertEqual(up(at: 3), .passThrough)
         XCTAssertEqual(down(at: 4), .start(.dictate))
+    }
+
+    // MARK: - No stuck Control
+
+    func testHoldingCoversTheWholeHoldAndNothingElse() {
+        XCTAssertFalse(gesture.isHolding)
+        _ = down(at: 0)
+        XCTAssertTrue(gesture.isHolding)
+        XCTAssertEqual(flags(at: 0.5, control: true, shift: true), .rewriteHint)
+        XCTAssertTrue(gesture.isHolding, "Shift's events during the hold must have Control cleared")
+        XCTAssertEqual(flags(at: 0.8, control: true), .passThrough)
+        XCTAssertTrue(gesture.isHolding, "So must Shift's release")
+        XCTAssertEqual(up(at: 1.5), .end(.rewrite))
+        XCTAssertFalse(gesture.isHolding)
+    }
+
+    func testACancelledHoldIsNoLongerHeld() {
+        _ = down(at: 0)
+        _ = gesture.keyDown()
+        XCTAssertFalse(gesture.isHolding, "After Ctrl+C the app has seen Control, so its flags are left alone")
+    }
+
+    func testForwardedFlagsClearControlOnlyDuringAHold() {
+        let ctrlShift: CGEventFlags = [.maskControl, .maskShift]
+        XCTAssertEqual(HotkeyService.forwardedFlags(ctrlShift, holding: true), .maskShift)
+        XCTAssertEqual(HotkeyService.forwardedFlags(ctrlShift, holding: false), ctrlShift)
     }
 
     func testIdleKeysAndClicksAreIgnored() {

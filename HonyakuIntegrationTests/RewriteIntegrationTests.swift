@@ -35,8 +35,9 @@ final class RewriteIntegrationTests: IntegrationTestBase {
         try XCTSkipIf(installed.isEmpty, "No cleanup model is downloaded")
         let model = installed.first { $0.id == "qwen3-4b-2507" } ?? installed[0]
         let service = CleanupService(modelID: model.id)
-        let request = RewritePlan(template: template).request(for: transcript, extraRules: [], englishFillers: true)
-        let output = RewritePrompt.stripEchoes(try await service.clean(transcript, request: request))
+        let plan = RewritePlan(template: template)
+        let request = plan.request(for: transcript, extraRules: [], englishFillers: true)
+        let output = RewritePrompt.stripEchoes(try await service.clean(transcript, request: request), plan: plan)
         // Shown with any failure, so a weak result can be told apart from a weak model
         print("Rewrite with \(model.id) as \(template.rawValue):\n\(output)")
         return output

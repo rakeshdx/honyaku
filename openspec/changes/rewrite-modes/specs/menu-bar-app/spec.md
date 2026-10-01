@@ -110,3 +110,48 @@ Clicking the Honyaku menu bar icon SHALL open the Settings window directly. Ther
 #### Scenario: A model is downloading in the background
 - **WHEN** a migrated model is downloading and the user opens Settings
 - **THEN** the General tab and the model's row in the Models tab show the download's progress
+
+---
+
+### Requirement: Settings is a single window
+The system SHALL provide a single Settings window, opened by clicking the menu bar icon (or "Settings…" in its right-click menu), with these tabs, in this order:
+- **General:** current status (see the menu bar icon requirement), launch at login, microphone device, permission status with "Open System Settings" for each missing permission.
+- **Models:** the speech and cleanup models, each with its download state, disk space used, "Use" (only for downloaded models), "In use" for the active one, Download and Delete.
+- **Dictation:** cleanup on/off, speaker labels on/off, the dictation language, and the cleanup prompt with "Reset to default", under an Advanced disclosure.
+- **Vocabulary:** the user's terms and how they're misheard (see "Settings has a Vocabulary tab").
+- **Rewrite:** the "Rewrite as" choice, the template for each kind of app, and the editable templates (see "Settings has a Rewrite tab").
+- **Apps:** the formatting rules for each kind of app and for individual apps (see "Settings has an Apps tab for per-app formatting rules").
+- **History:** a searchable list of transcripts. Each row SHALL have visible Copy and Delete buttons, reachable from the keyboard and named for VoiceOver, as well as Copy and Delete in its context menu. A row SHALL also offer "Add to vocabulary…", show the app the text went to (or "Not pasted"), and, for a rewrite, the "Rewritten as …" caption with the spoken words under "Your words". "Your words" SHALL show the speech model's original wording, before vocabulary corrections. "Delete all history…" sits behind a confirmation.
+- **Privacy:** the offline guarantees, and the Hugging Face access token under an Advanced disclosure. A token that fails to save SHALL show an error rather than "Saved".
+
+There SHALL never be more than one Settings window, and never more than one first-run window.
+
+#### Scenario: User opens Settings
+- **WHEN** the user clicks the menu bar icon, or chooses "Settings…" from its right-click menu
+- **THEN** the Settings window opens on the General tab, or the last tab used, and comes to the front
+
+#### Scenario: User clicks Settings again while it's open
+- **GIVEN** the Settings window is already open, possibly behind other windows
+- **WHEN** the user clicks the menu bar icon again, or chooses "Settings…" from its menu
+- **THEN** that same window comes to the front, and no second Settings window opens
+
+#### Scenario: Settings is minimised
+- **GIVEN** the user minimised the Settings window (or the first-run window) to the Dock
+- **WHEN** the user clicks the menu bar icon
+- **THEN** that same window is restored from the Dock and comes to the front, with its content as the user left it
+
+#### Scenario: User closes Settings
+- **WHEN** the user closes the Settings window and later clicks Settings again
+- **THEN** a single Settings window opens
+
+#### Scenario: User searches history
+- **WHEN** the user types "invoice" into the History search field
+- **THEN** only transcripts containing "invoice" (ignoring case and accents) are listed
+
+#### Scenario: User copies a transcript with the keyboard
+- **WHEN** the user tabs to a history row's Copy button and presses Space
+- **THEN** that transcript is on the clipboard
+
+#### Scenario: The tabs are in order
+- **WHEN** the user opens Settings
+- **THEN** the tabs read General, Models, Dictation, Vocabulary, Rewrite, Apps, History, Privacy

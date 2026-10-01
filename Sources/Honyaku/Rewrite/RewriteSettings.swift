@@ -64,8 +64,20 @@ final class RewriteSettings: FeatureStore {
 
     // MARK: - Prompts
 
+    /// The prompt a rewrite uses: the user's edit, or the default. An emptied prompt counts as the default.
     func prompt(for template: RewriteTemplateID) -> String {
+        guard let edited = editedPrompts[template],
+              !edited.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return template.defaultPrompt }
+        return edited
+    }
+
+    /// What the Rewrite tab's editor shows: the edit as typed, even while it's empty.
+    func editorText(for template: RewriteTemplateID) -> String {
         editedPrompts[template] ?? template.defaultPrompt
+    }
+
+    func isEdited(_ template: RewriteTemplateID) -> Bool {
+        editedPrompts[template] != nil
     }
 
     /// Saving the default text removes the stored copy, the same as "Reset to default".

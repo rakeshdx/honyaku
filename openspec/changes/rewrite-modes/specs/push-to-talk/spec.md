@@ -7,7 +7,7 @@ The system SHALL treat a hold of Control during which Shift was down at any mome
 - Recording SHALL start at Control key-down in both modes, with no added delay.
 - The 300 ms minimum hold, the busy guard and the stale-press rule SHALL apply to rewrites as they do to dictation.
 
-Shift's own events SHALL pass through to the active application.
+Shift's own events SHALL pass through to the active application. While a hold is in progress, Control SHALL be cleared from the modifier flags of every modifier event passed through, so no app is left believing Control is held after Honyaku consumes Control's own press and release.
 
 #### Scenario: Shift then Control
 - **GIVEN** Honyaku is idle
@@ -30,6 +30,11 @@ Shift's own events SHALL pass through to the active application.
 - **WHEN** the user taps Control+Shift for under 300 ms
 - **THEN** the audio is discarded, the microphone is released, and nothing is transcribed
 
+#### Scenario: No stuck Control after a rewrite
+- **GIVEN** a remote desktop client that tracks modifier keys from modifier events is in front
+- **WHEN** the user presses Control, presses Shift, releases Shift, then releases Control after speaking
+- **THEN** every modifier event the client received reported Control as up, so it doesn't treat Control as held afterwards
+
 ---
 
 ### Requirement: The capsule names the rewrite template
@@ -43,6 +48,16 @@ As soon as Shift is seen during a hold, the recording capsule SHALL show "Rewrit
 #### Scenario: Generating
 - **WHEN** the user releases Control after a rewrite hold
 - **THEN** the capsule shows "Rewriting as chat message…" until the text is pasted
+
+### Requirement: Honyaku says when it can't watch key presses
+If macOS refuses an event tap that sees key and mouse presses, the system SHALL keep push-to-talk working with modifier keys only, SHALL show the notice "Pressing a key during a hold won't cancel it. Honyaku couldn't watch key presses." once, and SHALL say the same in the General tab for as long as it lasts.
+
+#### Scenario: The key tap is refused
+- **GIVEN** macOS allows Honyaku's modifier tap but refuses the one with key and mouse presses
+- **WHEN** Honyaku starts listening for Control
+- **THEN** holding Control still dictates, the notice is shown once, and the General tab explains that a key press won't cancel a hold
+
+---
 
 ## MODIFIED Requirements
 
@@ -70,7 +85,7 @@ The system SHALL pass through all Control key combinations (e.g., Ctrl+C, Ctrl+Z
 - Pressing Command or Option while Control is held SHALL cancel the recording.
 - Control pressed while Command or Option is already held SHALL NOT start a recording.
 
-A cancelled hold SHALL stop capture, release the microphone and discard the audio, with no transcription, no paste and no error. The key, click or modifier that cancelled it SHALL reach the active application unchanged. The Control release that follows SHALL be consumed without effect. Cancelling SHALL apply however long Control has been held.
+A cancelled hold SHALL stop capture, release the microphone and discard the audio, with no transcription, no paste and no error. The key, click or modifier that cancelled it SHALL reach the active application unchanged. The Control release that follows SHALL reach the active application, so an app that saw Control in the cancelling event also sees it released. Cancelling SHALL apply however long Control has been held.
 
 #### Scenario: User presses Control+C while Honyaku is running
 - **WHEN** the user presses Ctrl+C in any application
@@ -92,10 +107,16 @@ A cancelled hold SHALL stop capture, release the microphone and discard the audi
 - **WHEN** the user holds Control and then presses Option
 - **THEN** the recording is cancelled without transcription, and the Option event reaches the app
 
+#### Scenario: Control is released in the app after a shortcut
+- **WHEN** the user holds Control for one second, presses C, then releases Control
+- **THEN** the terminal receives Ctrl+C and then the Control release, so Control isn't left held in the terminal
+
 ---
 
 ### Requirement: CGEventTap does not retain non-trigger key event data
-The event tap SHALL observe modifier changes, key-down events and mouse-down events, and nothing else. For key-down and mouse-down events, the system SHALL read only the event's type, never its key code, characters, location or any other payload, and SHALL use it only to cancel a hold in progress. While no hold is in progress, such events SHALL be passed through immediately with no state change. The system SHALL NOT log, buffer, store, modify or delay any event, and SHALL NOT retain any data from key events beyond whether Control and Shift are held.
+The event tap SHALL observe modifier changes, key-down events and mouse-down events, and nothing else. For key-down and mouse-down events, the system SHALL read only the event's type, never its key code, characters, location or any other payload, and SHALL use it only to cancel a hold in progress. While no hold is in progress, such events SHALL be passed through immediately with no state change. The system SHALL NOT log, buffer, store or delay any event, and SHALL NOT retain any data from key events beyond whether Control and Shift are held. The only change it SHALL make to an event is clearing Control from a modifier event passed through during a hold (see "Holding Control and Shift rewrites instead of dictating").
+
+The event tap SHALL run on its own thread with its own run loop, so work on Honyaku's main thread never delays key presses, clicks, or the ⌘V Honyaku posts to paste. Events Honyaku posts itself SHALL never cancel a hold.
 
 #### Scenario: User types while Honyaku is running
 - **WHEN** the user types characters in any application while the CGEventTap is active
@@ -108,6 +129,11 @@ The event tap SHALL observe modifier changes, key-down events and mouse-down eve
 #### Scenario: Key press during a hold
 - **WHEN** the user presses a letter key while holding Control
 - **THEN** Honyaku learns only that a key went down, cancels the hold, and passes the event through unchanged
+
+#### Scenario: Honyaku's main thread is busy
+- **GIVEN** Honyaku is saving History or waiting on an app that doesn't respond
+- **WHEN** the user types in another app, or Honyaku posts ⌘V to paste
+- **THEN** each event reaches its app without waiting for Honyaku's main thread
 
 ---
 

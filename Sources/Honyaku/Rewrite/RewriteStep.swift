@@ -14,12 +14,23 @@ enum RewriteStep {
         }
         let request = plan.request(for: text, extraRules: context.cleanupRules, englishFillers: context.englishFillers)
         do {
-            let output = RewritePrompt.stripEchoes(try await cleanup.clean(text, request: request))
-            guard !output.isEmpty else {
+            let output = try await cleanup.generate(text, request: request)
+            // Reasoning the cap cut off is never pasted, and what came before it isn't the rewrite
+            guard !output.reasoningCutOff else {
                 fallBack(&context, notice: RewriteCopy.failedNotice)
                 return text
             }
-            return output
+            var rewrite = RewritePrompt.stripEchoes(output.text, plan: plan)
+            if output.hitTokenLimit, !rewrite.isEmpty {
+                // Stopped mid-sentence at the cap: keep what's complete and say so
+                rewrite = RewritePrompt.trimmedToLastComplete(rewrite)
+                if !rewrite.isEmpty { context.notices.append(RewriteCopy.cutShortNotice) }
+            }
+            guard !rewrite.isEmpty else {
+                fallBack(&context, notice: RewriteCopy.failedNotice)
+                return text
+            }
+            return rewrite
         } catch {
             // Timeout, model not loaded, or any other error: the words as dictated, with no second model call
             fallBack(&context, notice: RewriteCopy.failedNotice)

@@ -80,18 +80,30 @@ final class RewriteTemplateTests: XCTestCase {
     }
 
     func testEchoedLabelsAreStripped() {
-        XCTAssertEqual(RewritePrompt.stripEchoes("Rewrite:\nSummary: x"), "Summary: x")
-        XCTAssertEqual(RewritePrompt.stripEchoes("Dictation to rewrite: hello"), "hello")
-        XCTAssertEqual(RewritePrompt.stripEchoes("  \n "), "")
-        XCTAssertEqual(RewritePrompt.stripEchoes("Summary: rewrite the parser"), "Summary: rewrite the parser")
-        XCTAssertEqual(RewritePrompt.stripEchoes("Rewritten chat message:\nReview the login bug - no rush."),
+        XCTAssertEqual(strip("Rewrite:\nSummary: x"), "Summary: x")
+        XCTAssertEqual(strip("Dictation to rewrite: hello"), "hello")
+        XCTAssertEqual(strip("  \n "), "")
+        XCTAssertEqual(strip("Summary: rewrite the parser"), "Summary: rewrite the parser")
+        XCTAssertEqual(strip("Rewritten chat message:\nReview the login bug - no rush.", .chatMessage),
                        "Review the login bug - no rush.")
-        XCTAssertEqual(RewritePrompt.stripEchoes("Jira ticket:\n\nSummary: x"), "Summary: x")
-        XCTAssertEqual(RewritePrompt.stripEchoes(
+        XCTAssertEqual(strip("Jira ticket:\n\nSummary: x"), "Summary: x")
+        XCTAssertEqual(strip("Here's your Jira ticket:\n\nSummary: x"), "Summary: x")
+        XCTAssertEqual(strip(
             "Rewrite the dictation as a Jira ticket in exactly this layout:\n\nSummary: x  \n- y  "), "Summary: x\n- y",
-            "A copied instruction and trailing spaces go")
-        XCTAssertEqual(RewritePrompt.stripEchoes("Acceptance criteria:\n- works"), "Acceptance criteria:\n- works",
+            "A line copied from the prompt and trailing spaces go")
+        XCTAssertEqual(strip("- Use only what the speaker said. Never invent names, numbers, dates, links, ticket IDs or facts.\nAdd retries"),
+                       "Add retries", "A copied shared rule goes")
+        XCTAssertEqual(strip("Acceptance criteria:\n- works"), "Acceptance criteria:\n- works",
                        "A section label is content, not an echo")
+    }
+
+    func testContentThatLooksLikeAnInstructionIsKept() {
+        XCTAssertEqual(strip("Rewrite the dictation pipeline as stages", .commitMessage),
+                       "Rewrite the dictation pipeline as stages")
+        XCTAssertEqual(strip("Here's the plan:\n- Ship it", .standupUpdate), "Here's the plan:\n- Ship it")
+        XCTAssertEqual(strip("Changes to the email template:\n- New footer", .prDescription),
+                       "Changes to the email template:\n- New footer", "Naming a template inside a heading isn't an echo")
+        XCTAssertEqual(strip("Rewrite: the parser is slow", .commitMessage), "Rewrite: the parser is slow")
     }
 
     func testOneLineForTerminals() {
@@ -100,6 +112,53 @@ final class RewriteTemplateTests: XCTestCase {
                        "Summary: Export does nothing Description: Clicking export does nothing. - Downloads a CSV")
         XCTAssertEqual(RewritePrompt.joinedOnOneLine("Run `make test` with $PATH set\r\n"), "Run `make test` with $PATH set",
                        "Backticks and $ are kept; the trailing line break goes")
+    }
+
+    func testEveryKindOfLineBreakIsJoinedAndControlsGo() {
+        for lineBreak in ["\r\n", "\r", "\u{2028}", "\u{2029}", "\u{85}", "\u{0B}", "\u{0C}"] {
+            XCTAssertEqual(RewritePrompt.joinedOnOneLine("one" + lineBreak + "two" + lineBreak), "one two",
+                           "Line break U+\(String(lineBreak.unicodeScalars.first!.value, radix: 16))")
+        }
+        XCTAssertEqual(RewritePrompt.joinedOnOneLine("ls\u{1B}[2J -la\u{07}\u{7F}"), "ls[2J -la", "Escape, bell and delete go")
+        XCTAssertEqual(RewritePrompt.joinedOnOneLine("a\tb"), "a\tb", "Tab stays")
+    }
+
+    func testCapCountsScriptsWithoutSpaces() {
+        let japanese = String(repeating: "エクスポートボタンを押しても何も起きません。", count: 14)  // about a minute
+        XCTAssertGreaterThan(RewritePrompt.estimatedTokens(japanese), 250)
+        XCTAssertEqual(RewritePrompt.tokenCap(for: .jiraTicket, transcript: japanese), 700)
+        XCTAssertEqual(RewritePrompt.estimatedTokens("githubを使う"), 2 + 3, "One word, plus three characters")
+        XCTAssertEqual(RewritePrompt.estimatedTokens("ship it today"), 4, "Spaced text is unchanged")
+    }
+
+    func testCutShortTrimsToTheLastCompleteLineOrSentence() {
+        XCTAssertEqual(RewritePrompt.trimmedToLastComplete("Summary: Export\n\nAcceptance criteria:\n- Downloads a C"),
+                       "Summary: Export\n\nAcceptance criteria:")
+        XCTAssertEqual(RewritePrompt.trimmedToLastComplete("Add retries. Make sure you log the err"), "Add retries.")
+        XCTAssertEqual(RewritePrompt.trimmedToLastComplete("All done."), "All done.")
+        XCTAssertEqual(RewritePrompt.trimmedToLastComplete("Add retries to the upl"), "", "Nothing complete is left")
+    }
+
+    func testUnclosedReasoningIsDropped() {
+        XCTAssertEqual(CleanupService.stripDelimiters("<think>\nThe user wants a ticket and"), "")
+        XCTAssertEqual(CleanupService.stripDelimiters("<think>a</think>Send it.<think>more"), "Send it.")
+        XCTAssertTrue(CleanupService.hasUnclosedReasoning("<think>\nThe user wants"))
+        XCTAssertFalse(CleanupService.hasUnclosedReasoning("<think>a</think>Send it."))
+    }
+
+    func testPromptCacheKeepsThreePromptsMostRecentLast() {
+        let cache = PromptPrefixCache()
+        for key in ["dictation", "jira", "chat"] { cache.put(.init(key: key, prefix: [1])) }
+        XCTAssertNotNil(cache.take("dictation"))
+        cache.put(.init(key: "dictation", prefix: [1]))
+        cache.put(.init(key: "email", prefix: [1]))
+        XCTAssertEqual(cache.entries.map(\.key), ["chat", "dictation", "email"], "The least recently used went")
+        cache.invalidate()
+        XCTAssertTrue(cache.entries.isEmpty)
+    }
+
+    private func strip(_ output: String, _ template: RewriteTemplateID = .jiraTicket) -> String {
+        RewritePrompt.stripEchoes(output, plan: RewritePlan(template: template))
     }
 }
 
@@ -122,6 +181,7 @@ final class RewriteSettingsTests: XCTestCase {
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
+        try? FileManager.default.removeItem(at: environment.directory)
         super.tearDown()
     }
 
@@ -153,6 +213,17 @@ final class RewriteSettingsTests: XCTestCase {
         XCTAssertEqual(RewriteSettings(environment: environment).template(for: .terminal), .commitMessage)
         settings.setTemplate(.agentPrompt, for: .terminal)
         XCTAssertNil(defaults.object(forKey: RewriteSettings.categoryTemplatesKey), "Back to the default: nothing stored")
+    }
+
+    func testAnEmptiedPromptCountsAsTheDefault() {
+        let settings = RewriteSettings(environment: environment)
+        settings.setPrompt("  \n", for: .chatMessage)
+        XCTAssertEqual(settings.editorText(for: .chatMessage), "  \n", "The editor keeps what's typed")
+        XCTAssertTrue(settings.isEdited(.chatMessage))
+        XCTAssertEqual(settings.prompt(for: .chatMessage), RewriteTemplateID.chatMessage.defaultPrompt)
+        XCTAssertEqual(settings.plan(forAppAtStart: slack).templatePrompt, RewriteTemplateID.chatMessage.defaultPrompt)
+        settings.resetPrompt(for: .chatMessage)
+        XCTAssertFalse(settings.isEdited(.chatMessage))
     }
 
     func testEditedPromptAndReset() {
@@ -218,6 +289,7 @@ final class RewritePipelineTests: XCTestCase {
 
     override func tearDown() {
         defaults.removePersistentDomain(forName: suiteName)
+        try? FileManager.default.removeItem(at: environment.directory)
         super.tearDown()
     }
 
@@ -325,6 +397,53 @@ final class RewritePipelineTests: XCTestCase {
         XCTAssertEqual(appState.status, .error(RewriteCopy.failedNotice))
     }
 
+    func testCutShortIsTrimmedAndFlagged() async {
+        cleanup.respond = { _ in "Summary: Export does nothing\n\nAcceptance criteria:\n- Downloads a C" }
+        cleanup.hitTokenLimit = true
+        await rewrite(makePipeline())
+        XCTAssertEqual(paste.pasted, ["Summary: Export does nothing\n\nAcceptance criteria:"])
+        XCTAssertEqual(store.entries.first?.mode, "rewrite")
+        XCTAssertEqual(appState.status, .error(RewriteCopy.cutShortNotice))
+    }
+
+    func testCutShortWithNothingCompleteIsAFailure() async {
+        cleanup.respond = { _ in "Add retries to the upl" }
+        cleanup.hitTokenLimit = true
+        await rewrite(makePipeline())
+        XCTAssertEqual(paste.pasted, ["the export button does nothing"])
+        XCTAssertEqual(appState.status, .error(RewriteCopy.failedNotice))
+    }
+
+    func testReasoningCutOffIsAFailure() async {
+        cleanup.respond = { _ in "Summary: half a thought" }
+        cleanup.reasoningCutOff = true
+        await rewrite(makePipeline())
+        XCTAssertEqual(paste.pasted, ["the export button does nothing"], "None of the model's output is pasted")
+        XCTAssertEqual(store.entries.first?.mode, "dictate")
+        XCTAssertEqual(appState.status, .error(RewriteCopy.failedNotice))
+    }
+
+    func testAFailedRewriteIntoAPasswordFieldShowsOnlyTheBlock() async {
+        cleanup.respond = nil
+        targets.secureField = true
+        await rewrite(makePipeline())
+        XCTAssertTrue(paste.pasted.isEmpty)
+        XCTAssertTrue(store.entries.isEmpty)
+        XCTAssertEqual(appState.status, .error(TranscriptionPipeline.passwordFieldMessage))
+    }
+
+    func testAFailedRewriteSavedOnlyShowsOnlyThatNotice() async {
+        cleanup.respond = nil
+        targets.honyakuIsFrontmost = true
+        await rewrite(makePipeline())
+        XCTAssertTrue(paste.pasted.isEmpty)
+        XCTAssertEqual(appState.status, .error(TranscriptionPipeline.savedWhileInFrontMessage))
+    }
+
+    func testFallbackNoticeDoesNotClaimAPaste() {
+        XCTAssertFalse(RewriteCopy.failedNotice.contains("pasted"))
+    }
+
     func testEmptyOutputIsAFailure() async {
         cleanup.respond = { _ in "  \n" }
         await rewrite(makePipeline())
@@ -385,10 +504,12 @@ final class RewriteHistoryTests: XCTestCase {
     func testMenuChecksTheCurrentChoiceAndSetsIt() throws {
         let suite = "HonyakuRewriteMenuTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let settings = RewriteSettings(environment: FeatureEnvironment(
-            directory: FileManager.default.temporaryDirectory.appending(path: "honyaku-tests-\(UUID().uuidString)"),
-            defaults: defaults))
+        let directory = FileManager.default.temporaryDirectory.appending(path: "honyaku-tests-\(UUID().uuidString)")
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: directory)
+        }
+        let settings = RewriteSettings(environment: FeatureEnvironment(directory: directory, defaults: defaults))
         let menu = RewriteMenu(settings: settings)
         let submenu = try XCTUnwrap(menu.item.submenu)
         XCTAssertEqual(submenu.items.filter { !$0.isSeparatorItem }.map(\.title),

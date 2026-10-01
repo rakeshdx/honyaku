@@ -161,6 +161,8 @@ final class AppCoordinator {
     private func stateChanged() {
         // A rewrite's label lasts while its hold or run does
         if !appState.status.isBusy, appState.rewriteTemplate != nil { appState.rewriteTemplate = nil }
+        // The Control listener runs on its own thread and never reads AppState; it gets the busy state from here
+        hotkeyService.setPipelineBusy(appState.status.isBusy)
         statusItem?.update(for: appState.status, rewriting: appState.rewriteTemplate != nil)
         capsule?.update(for: appState.status)
         if appState.setupComplete, pipeline == nil { startPipelineIfReady() }
@@ -185,8 +187,7 @@ final class AppCoordinator {
             hotkeyService.onRewriteHint = { [unowned self] in showRewriteTemplate() }
             hotkeyService.onRecordingEnded   = { mode in _ = p.stopRecordingAndProcess(mode: mode) }
             hotkeyService.onRecordingCancelled = { p.cancelRecording() }
-            let appState = appState
-            hotkeyService.setPipelineBusyCheck { appState.status.isBusy }
+            hotkeyService.setPipelineBusy(appState.status.isBusy)
             p.warmUp()
         }
 
@@ -201,6 +202,7 @@ final class AppCoordinator {
                     // Only the listener's own error is cleared; any other error stays for the user to read
                     if let listenerError, appState.lastError == listenerError { appState.clearError() }
                     listenerError = nil
+                    reportKeyPressCancel()
                 } catch {
                     reportListenerError("Honyaku couldn't listen for the Control key: \(error.localizedDescription) Quit and reopen Honyaku to try again.")
                 }
@@ -216,6 +218,20 @@ final class AppCoordinator {
         guard appState.status == .recording, let pipeline else { return }
         appState.rewriteTemplate = features.store(RewriteSettings.self)
             .resolvedTemplate(forAppAtStart: pipeline.recordingAppAtStart)
+    }
+
+    static let keyPressCancelUnavailableMessage =
+        "Pressing a key during a hold won't cancel it. Honyaku couldn't watch key presses."
+    private static let keyPressNoticeShownKey = "keyPressCancelNoticeShown"
+
+    /// When macOS gave the listener modifier keys only, the General tab says so for as long as it lasts, and
+    /// the notice is shown once.
+    private func reportKeyPressCancel() {
+        appState.keyPressCancelUnavailable = !hotkeyService.watchesKeyPresses
+        guard appState.keyPressCancelUnavailable, !features.defaults.bool(forKey: Self.keyPressNoticeShownKey),
+              !appState.status.isBusy else { return }
+        features.defaults.set(true, forKey: Self.keyPressNoticeShownKey)
+        appState.setError(Self.keyPressCancelUnavailableMessage)
     }
 
     private func reportListenerError(_ message: String) {

@@ -45,13 +45,13 @@ Facts this design relies on:
 | idle | Control goes down, with no Command or Option held (Shift may or may not be held) | `.start`, swallow the event. `sawShift = shift` |
 | idle | Control goes down with Command or Option held | `.passThrough` (unchanged) |
 | idle, pipeline busy | Control goes down | `.passThrough` (unchanged) |
-| holding | Shift goes down or up | `sawShift = true` on down. Event passes through. Recording continues |
-| holding | Command or Option goes down | `.cancel(.chord)`. Event passes through. The Control release that follows is swallowed |
-| holding | `keyDown` (any non-modifier key) | `.cancel(.key)`. Event passes through unchanged. The Control release is swallowed |
-| holding | left, right or other mouse-down | `.cancel(.click)`. Event passes through. The Control release is swallowed |
+| holding | Shift goes down or up | `sawShift = true` on down. Event passes through with Control cleared from its flags (Decision 9). Recording continues |
+| holding | Command or Option goes down | `.cancel(.chord)`. Event passes through. The Control release that follows passes through too |
+| holding | `keyDown` (any non-modifier key) | `.cancel(.key)`. Event passes through unchanged. The Control release passes through |
+| holding | left, right or other mouse-down | `.cancel(.click)`. Event passes through. The Control release passes through |
 | holding | Control goes up, held ≥ 300 ms | `.end(mode: sawShift ? .rewrite : .dictate)`, swallow |
 | holding | Control goes up, held < 300 ms | `.cancel(.tooShort)`, swallow (unchanged) |
-| cancelled hold | Control goes up | `.suppress` (swallow), back to idle |
+| cancelled hold | Control goes up | `.passThrough`, back to idle (Decision 9) |
 
 Rules that follow from the table:
 - The mode is the union of what was seen during the hold. Shift before Control, Shift after Control, and Shift released before Control all give a rewrite. Nothing is decided at key-down, so a plain-Control dictation starts exactly as fast as today.
@@ -181,7 +181,7 @@ Edited prompts are stored only when they differ from the default ("Reset to defa
 
 - **Model:** the selected cleanup model (`selectedCleanupModelID`), loaded through `CleanupService` with the same single-flight load and thinking off for Qwen3-1.7B. There is no separate rewrite model.
 - **Request:** `CleanupRequest(systemPrompt: shared + template, extraRules: DictationContext.cleanupRules, faithfulness: .none, maxTokens: cap)`, temperature 0, through the pipeline's `llmStage`. Two request fields make the call a rewrite rather than a cleanup: `transcriptLabel` ("Dictation to rewrite:", where cleanup uses "Transcript to clean:") and `speakerLabelRule` (Decision 3's line, where cleanup keeps the labels). With `faithfulness: .none`, empty output comes back empty rather than as the transcript, so the pipeline can treat it as a failure.
-- **Output cap:** `min(templateCap, 150 + 3 × estimated input tokens)`, with input tokens estimated as in `outputTokenLimit` (words × 4/3).
+- **Output cap:** `min(templateCap, 150 + 3 × estimated input tokens)`, with input tokens estimated as words × 4/3 plus one per character of a script written without spaces (Han, kana, Thai, Lao, Khmer, Myanmar). See Decision 9.
 
 | Template | Cap (tokens) |
 |---|---|
@@ -194,8 +194,8 @@ Edited prompts are stored only when they differ from the default ("Reset to defa
 | Email | 700 |
 
 - **Timeout:** 60 s, the same task-group race as cleanup. A timeout invalidates the prompt cache.
-- **Prompt cache:** keyed by model and full system prompt, as today. Switching templates re-prefills; the cost is acceptable (prompt processing ≥160 tok/s on a ~200-token system prompt).
-- **Output:** trimmed, with echoed delimiters or labels stripped: a leading heading line ("Rewritten chat message:", "Jira ticket:", "Here is…:"), a copied instruction line ("Rewrite the dictation as…"), a "Rewrite:" label, and spaces at the ends of lines. An empty result counts as a failure.
+- **Prompt cache:** keyed by model and full system prompt, holding up to three prompts (dictation plus the two most recent templates), so switching between dictation and a rewrite doesn't reprocess the system prompt each time. See Decision 9.
+- **Output:** trimmed, with echoed delimiters or labels stripped: a leading heading line naming a template ("Rewritten chat message:", "Jira ticket:", "Here is your Jira ticket:"), a line copied from the prompt itself, the dictation label, a "Rewritten:" label, and spaces at the ends of lines. Generic first lines are kept (Decision 9). An empty result counts as a failure, and so does reasoning cut off by the cap (an unclosed `<think>`).
 - **Filler removal:** the pipeline's English um/uh pass runs only on dictation and on the fallback text, never on rewrite output: it collapses runs of whitespace, which would join the sections.
 - **Faithfulness:** the `isFaithful` check is not run for rewrites; the newline, control-character and metacharacter rule is not applied either. The output paths that need protection are covered by Decision 6.
 - **Cleanup toggle:** affects only `.dictate`. A rewrite always uses the model, even with cleanup off.
@@ -208,7 +208,8 @@ The fallback text is the dictation as it would have been without any model: the 
 | Situation | Pasted | Status message |
 |---|---|---|
 | No cleanup model downloaded | the fallback text | "To use Rewrite, download a cleanup model in Settings > Models" (no download is started: the user may have chosen not to use one) |
-| Model error, empty output or 60 s timeout | the fallback text | "Couldn't rewrite: pasted your words as dictated" |
+| Model error, empty output, cut-off reasoning or 60 s timeout | the fallback text | "Couldn't rewrite: used your words as dictated" |
+| Output cut off at the cap | the rewrite, trimmed to its last complete line or sentence | "The rewrite was cut short" |
 
 Both messages use the "notice" style introduced for "Saved to History — Honyaku was in front": they show on the capsule, the icon and the General tab, and clear at the next dictation. The History entry is saved with `mode: .dictate`, so it reads as what it is.
 
@@ -263,13 +264,28 @@ Because the three features are built in parallel, Rewrite carries a minimal `Ter
 
 Settings views bind to the store, not to `AppState`, per the groundwork's rule that each feature keeps its own settings.
 
+### 9. Review fixes
+
+Found by the review of the three feature branches; all are in this change.
+
+- **The event tap has its own thread.** `HotkeyService` creates its one `.defaultTap` (Accessibility only, no Input Monitoring) and adds it to the run loop of a dedicated thread, `HotkeyTapThread`, which does nothing else. The callback stays O(1). The gesture state is only touched on that thread; the resulting actions (start, hint, end, cancel) are sent to the main actor with `DispatchQueue.main.async`. So nothing Honyaku does on the main thread (saving History, the password check waiting on a hung app, a large import) can delay a key press, a click or Honyaku's own ⌘V, and a slow main thread can no longer make macOS disable the tap. `tapDisabledByTimeout` and `tapDisabledByUserInput` are handled on the tap thread, which re-enables the tap and replays the live modifier state. The pipeline's busy state, which the gesture reads, is a lock-protected flag that the coordinator sets whenever the status changes, so the tap never reads main-actor state. `stop()` disables the tap, removes its source, stops the run loop and waits for the thread to finish. Key-downs that Honyaku posts itself (its paste) are recognised by the event's source process ID and passed straight through, so they can never cancel a hold.
+- **No stuck Control.** Control's own press is swallowed, so while a hold is in progress every modifier event passed through (Shift's, typically) has Control cleared from its flags: the app never sees Control down, and doesn't need to see it released. A hold cancelled by a key, a click or Command/Option is different: the cancelling event reaches the app *with* Control in its flags, because the user meant the shortcut. So the Control release after a cancel is passed through, not swallowed, and the app sees Control go up. The alternative of swallowing Shift's events too was rejected: it would hide Shift from apps during every rewrite hold.
+- **Notices match the outcome.** The fallback notice says "used your words as dictated", not "pasted". When the outcome is `.blocked`, only the block notice is shown; when it is `.saveOnly` with a notice, only that notice is shown. Other notices from the run would claim something that didn't happen.
+- **Echo stripping keeps content.** A first line is stripped only when it is a heading that names a template, the dictation label, or a line of the prompt itself (the shared rules or the template prompt in use). A first line such as "Rewrite the dictation pipeline as stages" is content.
+- **Cut short at the cap.** `CleanupService.generate` reports whether generation stopped at `maxTokens` (`GenerateStopReason.length`). A rewrite that did is trimmed back to its last complete line or, for one line, its last complete sentence, and the notice "The rewrite was cut short" is added. If nothing complete is left, the rewrite failed.
+- **Cut-off reasoning.** `CleanupService.stripDelimiters` drops everything from a `<think>` that never closes. For a rewrite, output that had one counts as a failure, so reasoning never reaches the paste. Word-for-word cleanup gets empty output and keeps the transcript.
+- **Caps for scripts without spaces.** Input tokens are estimated as words × 4/3 for spaced text plus one per character of a script written without spaces, so a minute of Japanese isn't capped like three words.
+- **Flags-only fallback is visible.** When macOS refuses the tap with key and mouse events and the flags-only tap is used, the coordinator shows "Pressing a key during a hold won't cancel it. Honyaku couldn't watch key presses." once (remembered in the feature settings), and the General tab shows the same line while it lasts.
+- **Smaller fixes.** The Rewrite tab's model note uses `ModelRegistry.smallCleanupModelID`. An emptied template prompt counts as the default (the editor keeps the empty text while editing; the rewrite uses the default). The prompt cache keeps up to three prompts; each holds the KV cache of one system prompt (about 25–60 MB for Qwen3-4B), so the worst case is under 200 MB. `TerminalOneLine` joins every kind of line break (`\R`: CRLF, U+2028, U+0085, VT, FF) and removes control characters other than tab. Tests remove their temporary folders.
+- **Spec.** This change MODIFIES "Settings is a single window" to the final eight tabs and History row, since it is the last of the three features to archive.
+
 ## Risks / Trade-offs
 
 - **The model invents details despite the rule.** Mitigation: temperature 0; the shared rules can't be edited; TBD placeholders; integration tests on fixed transcripts check that no name, number or ID absent from the transcript appears in the output.
 - **Qwen3-1.7B writes weaker rewrites.** Mitigation: the note in the Rewrite tab; the 4B model is already recommended on ≥16 GB Macs.
 - **Cancel-on-key throws away a long dictation after a stray key press.** This was accepted (Q16): a shortcut being transcribed is worse. The cancel is silent, so nothing is pasted.
 - **The tap now sees every key-down.** Mitigation: only the type is read, the callback returns at once while idle, and events are never modified. The privacy requirement is updated to say exactly this.
-- **Swallowing a Control release after a cancel** leaves the app having seen neither a Control down nor a Control up from the tap, which matches what it saw for plain dictation. No stuck-modifier risk.
+- **Stuck Control** (found in review): with Control's press and release swallowed, a Shift event passed through mid-hold carried Control in its flags, so an app tracking modifiers from modifier events (VMs, remote desktop, games) was left believing Control was held. Fixed in Decision 9.
 - **Rewrite latency** (1.5–4 s on an M3 Max, slower on base chips): the capsule label makes clear why it takes longer than dictation.
 - **Qwen3-4B's chat template isn't installed** (found while testing this change; not fixed here). The installed `qwen3-4b-2507` folder has no `chat_template` in `tokenizer_config.json` and no `chat_template.jinja`, so swift-transformers logs "No chat template was included or provided" and sends the system prompt and dictation as plain text. That affects cleanup as well as rewrites, and is a model-installer issue to fix separately. The integration tests pass even so, and the echo stripping above covers the copied-instruction lines it causes.
 

@@ -82,6 +82,10 @@ enum ModelRegistry {
         ),
     ]
 
+    /// The fast cleanup model, and the larger one recommended from 16 GB of memory.
+    static let smallCleanupModelID = "qwen3-1.7b"
+    static let largeCleanupModelID = "qwen3-4b-2507"
+
     // MARK: - Lookup helpers
 
     static func model(id: String) -> ModelInfo? {
@@ -92,7 +96,7 @@ enum ModelRegistry {
     static func recommended(forPhysicalMemory bytes: UInt64) -> (speech: String, cleanup: String) {
         // A "16 GB" Mac reports exactly 16 GiB; the margin keeps rounding from pushing it below
         let sixteenGB: UInt64 = 16 * 1024 * 1024 * 1024
-        let cleanup = bytes >= sixteenGB - 512 * 1024 * 1024 ? "qwen3-4b-2507" : "qwen3-1.7b"
+        let cleanup = bytes >= sixteenGB - 512 * 1024 * 1024 ? largeCleanupModelID : smallCleanupModelID
         return ("parakeet-tdt-v2", cleanup)
     }
 

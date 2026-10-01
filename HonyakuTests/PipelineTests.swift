@@ -58,6 +58,9 @@ struct CleanupFailure: Error {}
 final class FakeCleanup: CleanupServiceProtocol, @unchecked Sendable {
     /// The model's answer for a transcript; nil makes `clean` throw.
     var respond: ((String) -> String)? = { $0 }
+    /// How generation ended, as `generate` reports it.
+    var hitTokenLimit = false
+    var reasoningCutOff = false
     private(set) var inputs: [String] = []
     private(set) var requests: [CleanupRequest] = []
     /// Called on every `prepare()`, from whatever task loads the model.
@@ -68,6 +71,11 @@ final class FakeCleanup: CleanupServiceProtocol, @unchecked Sendable {
         requests.append(request)
         guard let respond else { throw CleanupFailure() }
         return respond(rawText)
+    }
+
+    func generate(_ rawText: String, request: CleanupRequest) async throws -> CleanupOutput {
+        CleanupOutput(text: try await clean(rawText, request: request), hitTokenLimit: hitTokenLimit,
+                      reasoningCutOff: reasoningCutOff)
     }
 
     func prepare() async throws { onPrepare?() }
@@ -407,19 +415,27 @@ final class PipelineTests: XCTestCase {
     }
 
     func testNoticesShowOnceAfterThePaste() async {
-        let stages = PipelineStages(afterTranscription: [NoticeStage(notice: "Couldn't rewrite: pasted your words as dictated")])
+        let stages = PipelineStages(afterTranscription: [NoticeStage(notice: "Couldn't rewrite: used your words as dictated")])
         await dictate(makePipeline(stages: stages))
 
         XCTAssertEqual(paste.pasted, ["hello world"])
         XCTAssertEqual(store.entries.count, 1)
-        XCTAssertEqual(appState.status, .error("Couldn't rewrite: pasted your words as dictated"))
+        XCTAssertEqual(appState.status, .error("Couldn't rewrite: used your words as dictated"))
     }
 
-    func testNoticesFollowTheRoutingNotice() async {
+    func testOnlyTheRoutingNoticeShowsWhenTextIsOnlySaved() async {
         targets.honyakuIsFrontmost = true
-        let stages = PipelineStages(final: [NoticeStage(notice: "Second.")])
+        let stages = PipelineStages(final: [NoticeStage(notice: "Pasted. Note: something.")])
         await dictate(makePipeline(stages: stages))
-        XCTAssertEqual(appState.status, .error(TranscriptionPipeline.savedWhileInFrontMessage + " Second."))
+        XCTAssertEqual(appState.status, .error(TranscriptionPipeline.savedWhileInFrontMessage),
+                       "Another notice could claim a paste that didn't happen")
+    }
+
+    func testOnlyTheBlockNoticeShowsWhenTextIsBlocked() async {
+        targets.secureField = true
+        let stages = PipelineStages(final: [NoticeStage(notice: "Pasted. Note: something.")])
+        await dictate(makePipeline(stages: stages))
+        XCTAssertEqual(appState.status, .error(TranscriptionPipeline.passwordFieldMessage))
     }
 
     func testNoNoticesForAFirstRunTest() async {

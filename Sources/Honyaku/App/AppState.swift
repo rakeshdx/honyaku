@@ -85,6 +85,8 @@ final class AppState {
     var recordingStartedAt: Date?
     /// The template of the rewrite being recorded or generated; nil while dictating.
     var rewriteTemplate: RewriteTemplateID?
+    /// macOS refused the event tap that sees key presses: a key press during a hold won't cancel it.
+    var keyPressCancelUnavailable = false
 
     // First run's "Try it" step: the dictation result is shown in the window instead of pasted.
     // Each test gets its own number, so a dictation started in a test that has since ended is discarded.

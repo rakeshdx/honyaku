@@ -80,7 +80,7 @@ struct RewriteSettingsView: View {
 
     private var modelNote: String? {
         if cleanupModelInstalled == false { return "Rewrite needs a cleanup model." }
-        if appState.selectedCleanupModelID == "qwen3-1.7b" {
+        if appState.selectedCleanupModelID == ModelRegistry.smallCleanupModelID {
             return "Qwen3-1.7B is fast but writes weaker rewrites. Qwen3-4B is better for this."
         }
         return nil
@@ -111,7 +111,7 @@ private struct TemplateRow: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             DisclosureGroup("Advanced", isExpanded: $showPrompt) {
-                TextEditor(text: Binding(get: { settings.prompt(for: template) },
+                TextEditor(text: Binding(get: { settings.editorText(for: template) },
                                          set: { settings.setPrompt($0, for: template) }))
                     .font(.system(.callout))
                     .frame(minHeight: 110)
@@ -122,7 +122,7 @@ private struct TemplateRow: View {
                         .foregroundStyle(.secondary)
                     Spacer()
                     Button("Reset to default") { settings.resetPrompt(for: template) }
-                        .disabled(settings.prompt(for: template) == template.defaultPrompt)
+                        .disabled(!settings.isEdited(template))
                 }
             }
             .font(.callout)
@@ -133,13 +133,21 @@ private struct TemplateRow: View {
 
 // MARK: - General tab
 
-/// Below the status card: how to rewrite.
+/// Below the status card: how to rewrite, and whether a key press cancels a hold.
 struct RewriteGeneralHint: View {
+    @Environment(AppState.self) private var appState
+
     var body: some View {
         Text(RewriteCopy.generalHint)
             .font(.callout)
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
+        if appState.keyPressCancelUnavailable {
+            Text(AppCoordinator.keyPressCancelUnavailableMessage)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

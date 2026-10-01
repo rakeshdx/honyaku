@@ -7,13 +7,16 @@ Unit tests SHALL cover, without models, microphone or network:
   - Shift released before Control
   - plain Control
   - a quick tap
-  - cancel on a key press, a click, Command or Option, with the following Control release swallowed
+  - cancel on a key press, a click, Command or Option, with the following Control release passed through
+  - Control cleared from modifier events passed through during a hold
   - idle key presses ignored
 - **template selection:** Automatic by category, a fixed choice, the app at start versus the app at paste
 - **prompt assembly:** the shared rules, the template prompt, vocabulary terms, the conditional speaker-label line, delimiters
-- **output caps and the stripping of echoed labels**
+- **output caps, including scripts without spaces, and the stripping of echoed labels without removing content**
+- **a rewrite cut short at its cap, and reasoning cut off**
+- **notices that match the outcome (pasted, saved only, blocked)**
 - **fallbacks:** no model, model error, empty output, timeout
-- **the terminal single-line rule**
+- **the terminal single-line rule, for every kind of line break and control character**
 - **History:** a rewrite entry round-trips, and old entries decode
 
 Integration tests (`TEST_RUNNER_INTEGRATION_TESTS=1`, with downloaded models) SHALL run Qwen3-4B on fixed transcripts for at least the Jira ticket and Chat message templates. They SHALL check that the output has the template's sections and contains no name, number or ID absent from the transcript. A UI test SHALL check that the right-click menu shows "Rewrite as" with Automatic and the seven templates, and that Settings has a Rewrite tab.
