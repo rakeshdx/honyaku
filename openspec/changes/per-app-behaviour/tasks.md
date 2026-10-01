@@ -51,6 +51,8 @@
 - [x] 8.8 Tests leave no temporary folders or settings suites behind
 - [x] 8.9 Gates: clean build with no project warnings, 242 unit tests (history.json unchanged), 6 UI tests (the real `settingsTab` unchanged), `openspec validate --strict`
 
+- [x] 8.10 Filler removal tidies spacing only where it removed a filler, so "git add ." keeps its standalone dot into terminals; tests: "git add ." unchanged, "um git add ." → "git add .", the existing filler cases unchanged, and a Terminals pipeline test
+
 ## 9. Manual checks
 
 - [ ] 9.1 Developer, by hand: Safari password field (blocked, not saved); Terminal with Secure Keyboard Entry (pasted and saved, no notice); Slack (pasted); terminal one-line and no full stop; does push-to-talk still fire while secure input is on?

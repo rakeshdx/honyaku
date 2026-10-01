@@ -96,6 +96,15 @@ final class CleanupServiceTests: XCTestCase {
         XCTAssertEqual(CleanupService.removeUnambiguousFillers("Um. So we go"), "So we go")
     }
 
+    func testFallbackTidiesSpacingOnlyWhereAFillerWas() {
+        XCTAssertEqual(CleanupService.removeUnambiguousFillers("git add ."), "git add .")
+        XCTAssertEqual(CleanupService.removeUnambiguousFillers("um git add ."), "git add .")
+        XCTAssertEqual(CleanupService.removeUnambiguousFillers("git add . uh"), "git add .")
+        XCTAssertEqual(CleanupService.removeUnambiguousFillers("we ship it uh."), "we ship it.")
+        XCTAssertEqual(CleanupService.removeUnambiguousFillers("um, uh, hello there"), "hello there")
+        XCTAssertEqual(CleanupService.removeUnambiguousFillers("We um, ship it"), "We ship it")
+    }
+
     // MARK: stripDelimiters
 
     func testEchoedFramingIsRemoved() {

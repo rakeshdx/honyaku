@@ -31,6 +31,36 @@ Right before pasting, the system SHALL identify the app that will receive the te
 - **WHEN** the paste simulation fails or the transcription pipeline is cancelled before completion
 - **THEN** any transcript text written to the pasteboard is cleared within 5 seconds and the prior clipboard contents are restored, and the error is shown on the menu bar icon and in Settings > General
 
+### Requirement: Unambiguous fillers never reach the paste
+When the transcript's language is English, the system SHALL remove "um", "umm", "uh" and "hmm" (as whole words, not inside words like "uh-huh") from the text before pasting, whatever the model returned, including when cleanup is off or falls back. For any other language these are not treated as fillers: they SHALL be kept, and the faithfulness check SHALL treat every word of a non-English transcript as content, because "um" is a real word in German ("um 5 Uhr") and Portuguese ("um carro").
+
+Removing a filler SHALL only tidy the spacing and punctuation where that filler was: the space it leaves, a comma that followed it, and punctuation or space it leaves at the start of the text. Everywhere else the text SHALL keep its exact spacing, so a standalone "." or "," that the speech model or cleanup model wrote stays standalone.
+
+#### Scenario: Model leaves a filler in
+- **WHEN** the model returns "I think we should uh ship it" for an English dictation
+- **THEN** "I think we should ship it" is pasted
+
+#### Scenario: German dictation
+- **WHEN** Whisper transcribes "Ich komme um 5 Uhr" with language German
+- **THEN** "um" is kept in the pasted text, and a cleanup output that drops it is rejected
+
+#### Scenario: Portuguese dictation
+- **WHEN** Whisper transcribes "Comprei um carro" with language Portuguese
+- **THEN** "um" is kept in the pasted text
+
+#### Scenario: A standalone full stop with no fillers
+- **WHEN** the text for an English dictation is "git add ."
+- **THEN** filler removal leaves it as "git add .", and a terminal receives "git add ."
+
+#### Scenario: A filler removed before a command
+- **WHEN** the text for an English dictation is "um git add ."
+- **THEN** "git add ." is pasted, with the "." still standalone
+
+#### Scenario: A filler before punctuation
+- **WHEN** the text for an English dictation is "Hmm, I like it, uh, a lot" or "Um. So we go"
+- **THEN** "I like it, a lot" and "So we go" are pasted, as before
+
+
 ## ADDED Requirements
 
 ### Requirement: Pasted text follows the receiving app's formatting rules

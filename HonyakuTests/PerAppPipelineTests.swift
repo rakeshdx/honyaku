@@ -176,6 +176,13 @@ final class PerAppPipelineTests: XCTestCase {
         XCTAssertEqual(history.entries.first?.pasted, true)
     }
 
+    func testTerminalKeepsAStandaloneFullStop() async {
+        targets.front = terminal
+        await dictate("git add .")
+        await dictate("um git add .")
+        XCTAssertEqual(paste.pasted, ["git add .", "git add ."])
+    }
+
     func testChatIsPastedUnchanged() async {
         await dictate("Sounds good, I\u{2019}ll ship it today.")
         XCTAssertEqual(paste.pasted, ["Sounds good, I\u{2019}ll ship it today."])
