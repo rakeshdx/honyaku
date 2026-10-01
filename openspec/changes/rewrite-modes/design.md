@@ -2,16 +2,16 @@
 
 Plain dictation is word for word: the cleanup model may only delete fillers, and `CleanupService.isFaithful` rejects anything else (new words, reordering, line breaks, shell metacharacters). Rewrite is a second, explicitly chosen mode where the model *is* allowed to restructure what was said into a format.
 
-This change builds on `dictation-stages`, which lands first. That change adds:
-- `DictationMode`
-- hotkey callbacks that carry the mode
-- `DictationContext`, which captures the app in front at recording start and at paste time
-- `AppCategory`
-- `CleanupRequest` (`systemPrompt`, `extraRules`, `faithfulness: .strict | .none`, `maxTokens`)
-- the pipeline's LLM stage
-- optional `TranscriptEntry.mode`
+This change builds on `dictation-stages` (merged in PR #7). It plugs into:
+- `DictationMode` (in `Pipeline/DictationContext.swift`), which gains `.rewrite`
+- `HotkeyServiceProtocol.onRecordingStarted(DictationMode)` and `onRecordingEnded(DictationMode)`, and `TranscriptionPipeline.stopRecordingAndProcess(mode:)`, where the mode at release wins
+- `DictationContext`: `appAtStart`, `appAtPaste`, `cleanupRules` (vocabulary's terms), `notices`, `englishFillers`
+- `CleanupRequest(systemPrompt:extraRules:faithfulness:maxTokens:englishFillers:)` and the pipeline's `llmStage`
+- `Pipeline/Stages/RewriteStages.swift`, the feature's own slot for a preparer and a final stage
+- `FeatureEnvironment.store(_:)` for the feature's settings
+- `TranscriptEntry.mode`
 
-The type names below follow the groundwork plan; where `dictation-stages` merged different names, this change uses the merged ones. `custom-vocabulary` and `per-app-behaviour` merge before this change (merge order: vocabulary, per-app, rewrite).
+`custom-vocabulary` and `per-app-behaviour` are built in parallel with this change, in their own worktrees, and may merge in either order around it. Rewrite therefore depends on neither: it reads vocabulary terms only through `DictationContext.cleanupRules`, and it carries its own terminal line join (Decision 6).
 
 Facts this design relies on:
 - **The event tap** listens only to `flagsChanged`, as a `.defaultTap` created under Accessibility (`HotkeyService.start`). An active tap under Accessibility may also receive `keyDown` and mouse-down events, so no new permission is needed. This is verified in task 2.1.
@@ -61,7 +61,13 @@ Rules that follow from the table:
 - Recovery after macOS disables the tap is unchanged: it replays `flagsState`. A key press that happened while the tap was disabled isn't seen, so that hold ends normally.
 - The 5 s stale rule and the busy guard apply in both modes.
 
-`HotkeyService`'s event mask gains `keyDown`, `leftMouseDown`, `rightMouseDown` and `otherMouseDown`. `onRecordingEnded` carries the mode (the groundwork's mode-carrying callback); `onRecordingStarted` stays mode-less, because the mode isn't known yet. The capsule's label is updated by a separate `onModeHint(.rewrite)` callback as soon as Shift is seen.
+`HotkeyService`'s event mask gains `keyDown`, `leftMouseDown`, `rightMouseDown` and `otherMouseDown`. If macOS refuses a tap with that mask, the service falls back to the flags-only mask, so push-to-talk keeps working without the key and click cancel.
+
+Callbacks:
+- `onRecordingStarted(mode)`: `.rewrite` when Shift is already down at Control-down, otherwise `.dictate`. The mode can still change before release.
+- `onRewriteHint()`: Shift seen for the first time during a hold that started as dictation. It updates the capsule's label.
+- `onRecordingEnded(mode)`: the final mode, from the union of what was seen. The pipeline uses it (`stopRecordingAndProcess(mode:)`).
+- `onRecordingCancelled()`: every cancel.
 
 *Alternatives considered:* deciding the mode at key-down, which forces an order and adds a wait; tap-then-hold Control, which is slower and conflicts with macOS's "Press Control twice" Dictation shortcut; Right Option, which MacBook keyboards make awkward and which is a separate key to learn. A long-hold exemption from the key-press cancel was rejected (Q16): it would bring back long shortcut holds being transcribed.
 
@@ -69,7 +75,7 @@ Rules that follow from the table:
 
 `RewriteTemplateID`: `jiraTicket`, `chatMessage`, `email`, `commitMessage`, `prDescription`, `agentPrompt`, `standupUpdate`.
 
-The template is resolved when the recording **ends**, from the app that was in front when it **started** (`DictationContext.appAtStart.category`):
+The template is resolved when the recording **ends**, from the app that was in front when it **started** (`DictationContext.appAtStart.category`). A preparer in `RewriteStages` does this: for a `.rewrite` dictation it puts a `RewritePlan` (the template and its prompt) on `DictationContext.rewrite`, which `llmStage` then runs:
 1. If the user picked a fixed template under "Rewrite as" (the right-click menu or the Rewrite tab), use it. It sticks until set back to Automatic.
 2. Otherwise, use the template mapped to the category. Defaults:
 
@@ -109,11 +115,16 @@ Conditional lines are added when they apply:
 
 Jira ticket:
 ```
-Rewrite the dictation as a Jira ticket with these sections:
-Summary: one line.
-Description: what the problem or request is, in a few sentences.
-Steps to reproduce: numbered steps. Include this section only if the speaker described steps.
-Acceptance criteria: "- " bullets saying what must be true when this is done.
+Rewrite the dictation as a Jira ticket in exactly this layout, starting each section with its label:
+
+Summary: one line
+
+Description: what the problem or request is, in a few sentences
+
+Acceptance criteria:
+- what must be true when this is done, one bullet each
+
+Only if the speaker described steps to reproduce, add "Steps to reproduce:" with numbered steps after the description. Every acceptance criterion must come from what the speaker said; add none of your own.
 ```
 
 Chat message:
@@ -133,10 +144,14 @@ Rewrite the dictation as a git commit message: a subject line in the imperative 
 
 PR description:
 ```
-Rewrite the dictation as a pull request description with these sections:
-Summary: one or two sentences.
-Changes: "- " bullets, one per change.
-Testing: how it was tested, or TBD.
+Rewrite the dictation as a pull request description in exactly this layout, starting each section with its label:
+
+Summary: one or two sentences
+
+Changes:
+- one bullet per change the speaker described
+
+Testing: how the speaker said it was tested, or TBD
 ```
 
 Coding-agent prompt:
@@ -146,18 +161,26 @@ Rewrite the dictation as one clear paragraph of instructions for a coding agent,
 
 Standup update:
 ```
-Rewrite the dictation as a standup update with these sections:
-Yesterday: "- " bullets.
-Today: "- " bullets.
-Blockers: "- " bullets, or "None" if the speaker mentioned none.
+Rewrite the dictation as a standup update in exactly this layout, starting each section with its label:
+
+Yesterday:
+- one bullet per thing done
+
+Today:
+- one bullet per thing planned
+
+Blockers:
+- one bullet per blocker, or "None" if the speaker mentioned none
 ```
+
+The three sectioned templates spell out their layout. With the plainer wording first drafted ("with these sections: Summary: one line…"), Qwen3-4B dropped the labels and invented steps and acceptance criteria in the integration test; with the layout it keeps the labels and adds none.
 
 Edited prompts are stored only when they differ from the default ("Reset to default" removes the stored copy), the same pattern as `cleanupPrompt`.
 
 ### 4. Generation
 
 - **Model:** the selected cleanup model (`selectedCleanupModelID`), loaded through `CleanupService` with the same single-flight load and thinking off for Qwen3-1.7B. There is no separate rewrite model.
-- **Request:** `CleanupRequest(systemPrompt: shared + template, extraRules: vocabulary terms, faithfulness: .none, maxTokens: cap)`, temperature 0, through the pipeline's LLM stage.
+- **Request:** `CleanupRequest(systemPrompt: shared + template, extraRules: DictationContext.cleanupRules, faithfulness: .none, maxTokens: cap)`, temperature 0, through the pipeline's `llmStage`. Two request fields make the call a rewrite rather than a cleanup: `transcriptLabel` ("Dictation to rewrite:", where cleanup uses "Transcript to clean:") and `speakerLabelRule` (Decision 3's line, where cleanup keeps the labels). With `faithfulness: .none`, empty output comes back empty rather than as the transcript, so the pipeline can treat it as a failure.
 - **Output cap:** `min(templateCap, 150 + 3 × estimated input tokens)`, with input tokens estimated as in `outputTokenLimit` (words × 4/3).
 
 | Template | Cap (tokens) |
@@ -172,7 +195,8 @@ Edited prompts are stored only when they differ from the default ("Reset to defa
 
 - **Timeout:** 60 s, the same task-group race as cleanup. A timeout invalidates the prompt cache.
 - **Prompt cache:** keyed by model and full system prompt, as today. Switching templates re-prefills; the cost is acceptable (prompt processing ≥160 tok/s on a ~200-token system prompt).
-- **Output:** trimmed, with echoed delimiters or labels stripped. An empty result counts as a failure.
+- **Output:** trimmed, with echoed delimiters or labels stripped: a leading heading line ("Rewritten chat message:", "Jira ticket:", "Here is…:"), a copied instruction line ("Rewrite the dictation as…"), a "Rewrite:" label, and spaces at the ends of lines. An empty result counts as a failure.
+- **Filler removal:** the pipeline's English um/uh pass runs only on dictation and on the fallback text, never on rewrite output: it collapses runs of whitespace, which would join the sections.
 - **Faithfulness:** the `isFaithful` check is not run for rewrites; the newline, control-character and metacharacter rule is not applied either. The output paths that need protection are covered by Decision 6.
 - **Cleanup toggle:** affects only `.dictate`. A rewrite always uses the model, even with cleanup off.
 - **Diarization:** runs as configured, before the LLM stage. Labels are handled as in Decision 3.
@@ -183,7 +207,7 @@ The fallback text is the dictation as it would have been without any model: the 
 
 | Situation | Pasted | Status message |
 |---|---|---|
-| No cleanup model downloaded | the fallback text | "To use Rewrite, download a cleanup model in Settings > Models" |
+| No cleanup model downloaded | the fallback text | "To use Rewrite, download a cleanup model in Settings > Models" (no download is started: the user may have chosen not to use one) |
 | Model error, empty output or 60 s timeout | the fallback text | "Couldn't rewrite: pasted your words as dictated" |
 
 Both messages use the "notice" style introduced for "Saved to History — Honyaku was in front": they show on the capsule, the icon and the General tab, and clear at the next dictation. The History entry is saved with `mode: .dictate`, so it reads as what it is.
@@ -199,7 +223,7 @@ For the Terminals category that means joining the lines:
 
 Nothing else is stripped: backticks, `$` and the like stay, because a single line runs nothing until the user presses Return (Q23).
 
-`per-app-behaviour` merges before this change, so Rewrite adds no line-joining code of its own: its final stage already runs on rewrite output. If the merge order ever changes and Rewrite lands first, Rewrite carries a minimal `TerminalOneLine` final stage, active only for `.rewrite` with a terminal category at paste time. Per-app's rules then replace it; it is deleted in that change's rebase, and the scenario in the text-cleanup delta stays satisfied either way.
+Because the three features are built in parallel, Rewrite carries a minimal `TerminalOneLine` stage in `RewriteStages.final`. It is active only for a `.rewrite` dictation whose app at paste time is a terminal. `PipelineStages.live` runs Rewrite's final stages before Per-app's, so once `per-app-behaviour` is merged its terminal rules run on the joined line, and that change may delete `TerminalOneLine` when its own join covers rewrites. The text-cleanup scenario is satisfied either way.
 
 ### 7. UI
 
@@ -208,6 +232,7 @@ Nothing else is stripped: backticks, `$` and the like stay, because a single lin
   - While processing: "Rewriting as Jira ticket…" in place of "Transcribing…".
   - No middle-dot separators. Template display names are used in sentence case ("Rewriting as chat message", "Rewriting as coding-agent prompt").
 - **Menu bar icon:** the processing symbol is unchanged. VoiceOver reads "Honyaku, Rewriting" while a rewrite is generating.
+- **Where the label comes from:** `AppState.rewriteTemplate` holds the template of the hold or run in progress. `AppCoordinator` sets it when a hold becomes a rewrite, resolving it against the app the recording started with (`TranscriptionPipeline.recordingAppAtStart`) and the same settings the preparer uses. It clears it when the status is no longer busy. The capsule and the status item read it.
 - **Right-click menu:**
   - The order is "Settings…", "Rewrite as" ▸, a separator, then "Quit Honyaku".
   - "Rewrite as" contains Automatic (by app), a separator, then the seven templates.
@@ -218,19 +243,20 @@ Nothing else is stripped: backticks, `$` and the like stay, because a single lin
   - **Templates by app:** one picker per category, for Chat apps, Email, Terminals, Code editors, Browsers and Everything else.
   - **Templates:** the seven templates, each with a one-line description and an Advanced disclosure holding the editable prompt and "Reset to default".
   - **Model note:**
-    - If Qwen3-1.7B is selected: "Qwen3-1.7B is fast but writes weaker rewrites. Qwen3-4B is better for this." with a button to the Models tab.
+    - If Qwen3-1.7B is selected: "Qwen3-1.7B is fast but writes weaker rewrites. Qwen3-4B is better for this." with a button to the Models tab (the Settings window selects a tab on the `showSettingsTab` notification).
     - If no cleanup model is downloaded: "Rewrite needs a cleanup model." with the same button.
 - **General tab:** under "Hold Control to talk", the line "Hold Control+Shift to rewrite as a Jira ticket, chat message, email and more."
 - **History:**
   - A rewrite row shows the rewritten text, a "Rewritten as Jira ticket" caption, and a "Your words" disclosure with the spoken transcript.
   - Copy copies the rewrite.
-  - Search matches both texts.
+  - Search matches both texts (`TranscriptStore.filter` also matches `rawText` for rewrite entries).
   - `TranscriptEntry` gains an optional `rewriteTemplateID`. `mode` comes from the groundwork, and old entries decode as dictation.
 - **First run:** unchanged.
+- **Last tab:** the Settings window now remembers its last tab in the app's settings store (`FeatureEnvironment.defaults`) rather than `UserDefaults.standard`. In the app they're the same; in UI-test launches it's the separate test suite, so the Rewrite tab UI test never changes the user's saved tab.
 
 ### 8. Settings storage
 
-A small `RewriteSettings` store wraps a `UserDefaults` instance that tests can inject:
+`RewriteSettings` is the feature's `FeatureStore`, shared through `FeatureEnvironment.store(RewriteSettings.self)` by the preparer, the coordinator, the right-click menu and the Rewrite tab. It keeps its values in the environment's `UserDefaults` (a private suite in tests):
 - `rewriteTemplateChoice` (`"automatic"` or a template ID)
 - `rewriteCategoryTemplates` (a category → template ID dictionary, stored only when it differs from the defaults)
 - `rewritePrompt.<templateID>` (only when edited)
@@ -245,6 +271,7 @@ Settings views bind to the store, not to `AppState`, per the groundwork's rule t
 - **The tap now sees every key-down.** Mitigation: only the type is read, the callback returns at once while idle, and events are never modified. The privacy requirement is updated to say exactly this.
 - **Swallowing a Control release after a cancel** leaves the app having seen neither a Control down nor a Control up from the tap, which matches what it saw for plain dictation. No stuck-modifier risk.
 - **Rewrite latency** (1.5–4 s on an M3 Max, slower on base chips): the capsule label makes clear why it takes longer than dictation.
+- **Qwen3-4B's chat template isn't installed** (found while testing this change; not fixed here). The installed `qwen3-4b-2507` folder has no `chat_template` in `tokenizer_config.json` and no `chat_template.jinja`, so swift-transformers logs "No chat template was included or provided" and sends the system prompt and dictation as plain text. That affects cleanup as well as rewrites, and is a model-installer issue to fix separately. The integration tests pass even so, and the echo stripping above covers the copied-instruction lines it causes.
 
 ## Migration Plan
 
