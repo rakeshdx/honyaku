@@ -139,7 +139,7 @@ final class HostedWindow: NSObject, NSWindowDelegate {
 @MainActor
 final class SettingsWindowController: NSObject {
     enum Tab: String, CaseIterable {
-        case general, models, dictation, vocabulary, history, privacy
+        case general, models, dictation, vocabulary, apps, history, privacy
 
         var title: String {
             switch self {
@@ -147,6 +147,7 @@ final class SettingsWindowController: NSObject {
             case .models: return "Models"
             case .dictation: return "Dictation"
             case .vocabulary: return "Vocabulary"
+            case .apps: return "Apps"
             case .history: return "History"
             case .privacy: return "Privacy"
             }
@@ -158,6 +159,7 @@ final class SettingsWindowController: NSObject {
             case .models: return "square.stack.3d.up"
             case .dictation: return "text.bubble"
             case .vocabulary: return "character.book.closed"
+            case .apps: return "square.grid.2x2"
             case .history: return "clock"
             case .privacy: return "lock"
             }
@@ -214,6 +216,7 @@ final class SettingsWindowController: NSObject {
             case .models: ModelsSettings()
             case .dictation: DictationSettings()
             case .vocabulary: VocabularySettings()
+            case .apps: AppsSettings()
             case .history: HistorySettings()
             case .privacy: PrivacySettings()
             }

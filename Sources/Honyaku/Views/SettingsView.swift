@@ -507,6 +507,7 @@ private struct HistoryRow: View {
                 Text(entry.timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                HistoryAppLabel(entry: entry)
                 // Visible and in the key loop, not only in the context menu
                 HStack(spacing: 6) {
                     Button(action: copy) {
