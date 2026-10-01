@@ -5,6 +5,9 @@ After transcription and the speaker-label merge, and before cleanup runs, the sy
 - **Matching:**
   - It SHALL ignore letter case and SHALL treat curly and straight apostrophes as the same.
   - It SHALL match whole words or phrases only: no letter or digit directly before or after.
+  - A change of script SHALL count as a word boundary, and so SHALL a Han, Hiragana, Katakana or Hangul character next to the match, so terms match inside Japanese, Chinese or Korean text.
+  - A match followed by an apostrophe and a letter SHALL be rejected (it's part of a contraction such as "don't"), except a possessive "'s" followed by a non-word character.
+  - Text inside a link, email address, file path or code identifier SHALL NOT be changed: any whitespace-delimited token containing "://", "@", "/", "_", or a "." between two letters.
   - It SHALL let a space in a spelling match any run of whitespace.
 - **What's kept:** punctuation next to a match, and a possessive "'s" directly after it, SHALL be kept.
 - **Overlaps:** where matches overlap, the longest SHALL win. On a tie, the term higher in the list SHALL win.
@@ -13,6 +16,7 @@ After transcription and the speaker-label merge, and before cleanup runs, the sy
 - **Scope:** corrections SHALL apply with either speech engine and with cleanup on or off.
 - **Timing:** they SHALL apply from the next dictation after the list changes, without relaunching.
 - **Disabled terms:** these SHALL be ignored.
+- **One list per dictation:** a dictation SHALL use the list as it was when the dictation started, even if it's edited in Settings while the dictation is running.
 
 #### Scenario: Misheard product name
 - **GIVEN** the vocabulary has the term "Paramount+" heard as "paramount plus"
@@ -39,6 +43,21 @@ After transcription and the speaker-label merge, and before cleanup runs, the sy
 - **WHEN** the speech model returns "paramount plus launched"
 - **THEN** the text becomes "Paramount+ launched", not "Paramount plus launched"
 
+#### Scenario: Contraction
+- **GIVEN** the vocabulary has the term "Don"
+- **WHEN** the speech model returns "I don't know, ask don"
+- **THEN** the text becomes "I don't know, ask Don"
+
+#### Scenario: Link and identifier
+- **GIVEN** the vocabulary has the terms "GitHub" and "Jira"
+- **WHEN** the speech model returns "see github.com/acme and jira_client, then email a@jira.com about github"
+- **THEN** only the last word changes: "see github.com/acme and jira_client, then email a@jira.com about GitHub"
+
+#### Scenario: Japanese text
+- **GIVEN** the vocabulary has the term "GitHub"
+- **WHEN** the speech model returns "githubを使う"
+- **THEN** the text becomes "GitHubを使う"
+
 #### Scenario: Speaker labels untouched
 - **GIVEN** the vocabulary has the term "Speaker" and speaker labels are on
 - **WHEN** a two-speaker dictation is transcribed
@@ -61,11 +80,17 @@ When the selected speech engine is Whisper and the dictation language is English
   - when Parakeet is selected
   - when no term is enabled
 - **No leaks:** the hint text SHALL never appear in the transcript.
+- **Silence:** the hint SHALL NOT stop Whisper from ending a window that holds no speech. Only the first sampled token of a prompted window is kept from being end-of-text.
 
 #### Scenario: Whisper with English
 - **GIVEN** Whisper is selected, the dictation language is English, and the vocabulary lists "Pluto TV" and "Jira"
 - **WHEN** the user dictates
 - **THEN** Whisper is decoded with a prompt made of those terms, and the pasted text contains no glossary text the user didn't say
+
+#### Scenario: Long dictation ending in silence
+- **GIVEN** Whisper is selected with a vocabulary hint
+- **WHEN** the user speaks one sentence and keeps holding Control for 30 more seconds of silence
+- **THEN** the transcript is that sentence, with no glossary terms added from the silent stretch
 
 #### Scenario: Another language chosen
 - **GIVEN** Whisper is selected and the dictation language is Italian

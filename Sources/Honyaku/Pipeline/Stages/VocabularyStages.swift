@@ -4,7 +4,8 @@
 enum VocabularyStages {
     static func make(_ environment: FeatureEnvironment) -> PipelineStages {
         let store = environment.store(VocabularyStore.self)
-        return PipelineStages(preparers: [VocabularyPreparer(store: store)],
-                              afterTranscription: [VocabularyCorrectionStage(store: store)])
+        let snapshot = VocabularySnapshot()
+        return PipelineStages(preparers: [VocabularyPreparer(store: store, snapshot: snapshot)],
+                              afterTranscription: [VocabularyCorrectionStage(snapshot: snapshot)])
     }
 }

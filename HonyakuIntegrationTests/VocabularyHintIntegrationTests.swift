@@ -1,3 +1,4 @@
+import AVFoundation
 import WhisperKit
 import XCTest
 @testable import Honyaku
@@ -35,6 +36,28 @@ final class VocabularyHintIntegrationTests: IntegrationTestBase {
         }
     }
 
+    /// A sentence, then 30 s of near-silence: the second Whisper window has no speech. The hint must not
+    /// force a word into it (the blank filter acts only before the first sampled token). Calls the speech
+    /// service directly, so the pipeline's silence gate doesn't hide the case.
+    func testAGlossaryAddsNothingToASilentWindow() async throws {
+        let model = try XCTUnwrap(ModelRegistry.speechModels.first { $0.engine == .whisperKit })
+        try XCTSkipUnless(ModelInstaller.isInstalled(model), "Whisper isn't installed")
+        let service = TranscriptionService()
+        let sentence = try Self.renderSpeech("Please file a Jira ticket.", name: "vocab-trailing")
+        let clip = try Self.appendingSilence(seconds: 30, to: sentence, name: "vocab-trailing-silence")
+
+        let text = try await transcribe(clip, with: service, model: model, glossary: glossary)
+        print("Vocabulary hint, sentence then 30 s of silence: \(text)")
+        XCTAssertTrue(text.contains("Jira"), "The spoken sentence: \(text)")
+        XCTAssertFalse(text.lowercased().contains("paramount"), "Unspoken glossary term: \(text)")
+        XCTAssertFalse(text.lowercased().contains("pluto"), "Unspoken glossary term: \(text)")
+    }
+
+    override class func tearDown() {
+        try? FileManager.default.removeItem(at: workDir)
+        super.tearDown()
+    }
+
     private func transcribe(_ clip: URL, with service: TranscriptionService, model: Honyaku.ModelInfo,
                             glossary: [String]) async throws -> String {
         // The service deletes its input, so hand it a copy named like a real dictation
@@ -56,6 +79,27 @@ final class VocabularyHintIntegrationTests: IntegrationTestBase {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }()
+
+    /// `clip` followed by `seconds` of very quiet, deterministic noise (as a real room), as a 16 kHz mono WAV.
+    private static func appendingSilence(seconds: Int, to clip: URL, name: String) throws -> URL {
+        var samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: clip.path)
+        var seed: UInt32 = 12345
+        for _ in 0..<(seconds * 16_000) {
+            seed = seed &* 1_103_515_245 &+ 12345
+            samples.append((Float(seed >> 16 & 0x7FFF) / 32_767 - 0.5) * 0.0004)
+        }
+        let url = workDir.appending(path: "\(name).wav")
+        try? FileManager.default.removeItem(at: url)
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(samples.count)))
+        buffer.frameLength = AVAudioFrameCount(samples.count)
+        samples.withUnsafeBufferPointer { source in
+            buffer.floatChannelData![0].update(from: source.baseAddress!, count: samples.count)
+        }
+        let file = try AVAudioFile(forWriting: url, settings: format.settings)
+        try file.write(from: buffer)
+        return url
+    }
 
     /// Speaks `text` with the system voice into a 16 kHz mono WAV.
     private static func renderSpeech(_ text: String, name: String) throws -> URL {

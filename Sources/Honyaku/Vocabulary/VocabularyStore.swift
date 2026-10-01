@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import OSLog
 
 /// The user's word list: `vocabulary.json` next to `history.json`, private to this Mac.
 /// One store per `FeatureEnvironment`, shared by the pipeline stages and the Vocabulary tab.
@@ -9,11 +10,20 @@ final class VocabularyStore: FeatureStore {
     static let fileName = "vocabulary.json"
     /// Terms in the cleanup prompt's "write these exactly" rule.
     static let promptRuleLimit = 40
+    /// Import limits: a bigger file is refused rather than freezing the app.
+    static let importByteLimit = 1_000_000
+    static let importTermLimit = 2_000
+
+    private static let log = Logger(subsystem: "com.honyaku.app", category: "vocabulary")
 
     /// The user's order: the top of the list matters most.
     private(set) var terms: [VocabularyTerm] = []
     /// Set when `vocabulary.json` couldn't be read and was set aside; shown in the tab until dismissed.
     var corruptFileNotice: String?
+    /// Set when the last change couldn't be saved; shown in the tab until dismissed or a save succeeds.
+    var saveFailureNotice: String?
+    /// The damaged file couldn't be set aside: never overwrite it. Edits still apply until quit.
+    @ObservationIgnored private var savingBlocked = false
 
     @ObservationIgnored let fileURL: URL
     /// Rebuilt only when the list changes, not on every dictation.
@@ -107,43 +117,59 @@ final class VocabularyStore: FeatureStore {
     }
 
     /// Merges a file by term, ignoring case: existing terms gain spellings and keep their place and on/off
-    /// state, new terms go at the end, nothing is deleted. Throws, changing nothing, for an unreadable file.
+    /// state, new terms go at the end, nothing is deleted. Throws, changing nothing, for an unreadable file
+    /// or one over the import limits. One pass, with lookups by folded spelling, so time is linear.
     func importData(_ data: Data) throws -> VocabularyImportSummary {
+        guard data.count <= Self.importByteLimit else { throw VocabularyImportError.tooLarge }
         let file = try Self.decodeFile(data)
+        guard file.terms.count <= Self.importTermLimit else { throw VocabularyImportError.tooLarge }
         var summary = VocabularyImportSummary()
         var merged = terms
+        // Folded term → its index, and folded spelling (term or heard-as) → the index of the term using it
+        var termIndex: [String: Int] = [:]
+        var owners: [String: Int] = [:]
+        for (index, term) in merged.enumerated() {
+            termIndex[VocabularyText.fold(term.term)] = index
+            owners[VocabularyText.fold(term.term)] = index
+            for heard in term.heardAs { owners[VocabularyText.fold(heard)] = index }
+        }
         for incoming in file.terms {
             let spelling = VocabularyText.normalized(incoming.term)
             guard !spelling.isEmpty, spelling.count <= VocabularyError.maxLength else { continue }
-            let index = merged.firstIndex { VocabularyText.fold($0.term) == VocabularyText.fold(spelling) }
+            let foldedSpelling = VocabularyText.fold(spelling)
+            let index = termIndex[foldedSpelling]
             // A new term that another term already lists as a heard-as spelling would make both ambiguous
-            if index == nil, let owner = Self.owner(of: spelling, in: merged, excluding: nil) {
-                summary.skipped.append((spelling, owner.term))
+            if index == nil, let owner = owners[foldedSpelling] {
+                summary.skipped.append((spelling, merged[owner].term))
                 continue
             }
+            let targetIndex = index ?? merged.count
             var target = index.map { merged[$0] } ?? VocabularyTerm(term: spelling, enabled: incoming.enabled)
-            var gained = false
+            var gained: [String] = []
             for heard in incoming.heardAs.map(VocabularyText.normalized) {
+                let foldedHeard = VocabularyText.fold(heard)
                 guard !heard.isEmpty, heard.count <= VocabularyError.maxLength,
-                      VocabularyText.fold(heard) != VocabularyText.fold(target.term),
-                      !target.heardAs.contains(where: { VocabularyText.fold($0) == VocabularyText.fold(heard) })
+                      foldedHeard != VocabularyText.fold(target.term),
+                      !target.heardAs.contains(where: { VocabularyText.fold($0) == foldedHeard })
                 else { continue }
-                if let owner = Self.owner(of: heard, in: merged, excluding: target.id) {
-                    summary.skipped.append((heard, owner.term))
+                if let owner = owners[foldedHeard], owner != targetIndex {
+                    summary.skipped.append((heard, merged[owner].term))
                     continue
                 }
                 target.heardAs.append(heard)
-                gained = true
+                gained.append(foldedHeard)
             }
             if let index {
-                if gained {
-                    merged[index] = target
-                    summary.updated += 1
-                }
+                guard !gained.isEmpty else { continue }
+                merged[index] = target
+                summary.updated += 1
             } else {
                 merged.append(target)
+                termIndex[foldedSpelling] = targetIndex
+                owners[foldedSpelling] = targetIndex
                 summary.added += 1
             }
+            for folded in gained { owners[folded] = targetIndex }
         }
         if merged != terms {
             terms = merged
@@ -227,13 +253,21 @@ final class VocabularyStore: FeatureStore {
         let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let name = "vocabulary.corrupt-\(stamp).json"
         let backup = fileURL.deletingLastPathComponent().appending(path: name)
-        try? FileManager.default.moveItem(at: fileURL, to: backup)
         terms = []
-        corruptFileNotice = "Your word list couldn\u{2019}t be read. It was saved as \(name), and Honyaku started a new one."
+        do {
+            try FileManager.default.moveItem(at: fileURL, to: backup)
+            corruptFileNotice = "Your word list couldn\u{2019}t be read. It was saved as \(name), and Honyaku started a new one."
+        } catch {
+            // Never overwrite a file the user may want back
+            savingBlocked = true
+            Self.log.error("Couldn't set aside the damaged vocabulary file: \(error.localizedDescription, privacy: .public)")
+            corruptFileNotice = "Couldn\u{2019}t set aside the damaged vocabulary file. Changes won\u{2019}t be saved until it\u{2019}s fixed or removed."
+        }
     }
 
     /// Atomic, owner-only and excluded from backup, like `history.json`.
     private func persist() {
+        guard !savingBlocked else { return }
         do {
             let directory = fileURL.deletingLastPathComponent()
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -243,9 +277,11 @@ final class VocabularyStore: FeatureStore {
             values.isExcludedFromBackup = true
             var url = fileURL
             try url.setResourceValues(values)
+            saveFailureNotice = nil
         } catch {
             // Operational metadata only, never the terms
-            print("[VocabularyStore] save failed: \(error.localizedDescription)")
+            Self.log.error("Couldn't save the vocabulary: \(error.localizedDescription, privacy: .public)")
+            saveFailureNotice = "Couldn\u{2019}t save your word list: \(error.localizedDescription) Your changes apply until you quit Honyaku."
         }
     }
 }

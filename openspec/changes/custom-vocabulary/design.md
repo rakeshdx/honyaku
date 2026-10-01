@@ -33,13 +33,17 @@ The decisions behind this design were settled on 2026-10-01 (Q8–Q10, Q24, Q25,
 - **Writes:** atomic, mode 0600, excluded from backup, the same as `history.json`.
 - **Corrupt file:**
   - It is renamed to `vocabulary.corrupt-<ISO date>.json`, and the app starts with an empty list.
+  - If the rename fails, the store keeps the damaged file and stops saving (edits apply until quit), and the tab reads "Couldn't set aside the damaged vocabulary file. Changes won't be saved until it's fixed or removed." The damaged file is never overwritten.
+- **Save failures:** logged with `Logger` (metadata only, never terms) and shown in the tab: "Couldn't save your word list: <reason>. Your changes apply until you quit Honyaku."
   - The Vocabulary tab shows "Your word list couldn't be read. It was saved as vocabulary.corrupt-….json, and Honyaku started a new one." until the user dismisses it.
   - Dictation is never blocked by a bad file.
 - **Validation on edit:**
   - A term is trimmed, non-empty and at most 100 characters.
   - Terms are unique ignoring case; a duplicate is refused with "Already in your list".
   - A heard-as spelling is trimmed, non-empty, and unique across the list ignoring case. A heard-as spelling that's already used by another term is refused, naming that term.
-- **Change notification:** the store is `@Observable`, so the tab updates as it changes. The stages hold the store, not a copy: the preparer and the correction stage read the current list on every dictation, so edits apply to the next dictation without relaunching. The matcher and rule are rebuilt only when the list changes.
+- **Change notification:** the store is `@Observable`, so the tab updates as it changes. The stages hold the store, not a copy, so edits apply to the next dictation without relaunching. The matcher and rule are rebuilt only when the list changes.
+- **One list per dictation (review fix):** the preparer takes a snapshot when the dictation starts: the matcher (into a `VocabularySnapshot` shared by the preparer and the correction stage) and `context.vocabularyTerms`. The correction stage uses that snapshot, so an edit in Settings during a dictation applies to the next one. Dictations never overlap (the pipeline's busy guard), so one shared snapshot box is enough.
+- **`context.vocabularyTerms` (review fix):** every enabled term, for every engine and language. Other features read it: Per-app's first-letter rule protects these terms, and cleanup protects them in the word-for-word check (Decision 4). `speechHints.glossary` stays Whisper-only.
 
 ### 2. Matching (`VocabularyMatcher`)
 - **Candidates:** for every enabled term, each of its heard-as spellings plus the term itself all map to the term as written. That's how "jira" → "Jira" works with no heard-as entry.
@@ -49,9 +53,12 @@ The decisions behind this design were settled on 2026-10-01 (Q8–Q10, Q24, Q25,
   - Spaces inside a multi-word spelling match any run of whitespace in the transcript.
   - Punctuation next to a match is kept: "jira," → "Jira,".
   - A possessive "'s" or "’s" straight after a match is kept: "jira's" → "Jira's".
+  - **Contractions (review fix):** a match followed by an apostrophe and a letter is rejected, unless it's a possessive "'s" followed by a non-word character. So the term "Don" leaves "don't" alone, and "Won" leaves "won't".
+  - **Scripts (review fix):** a change of script counts as a boundary, and a Han, Hiragana, Katakana or Hangul character next to a match counts as a non-word character, since those scripts don't put spaces between words: "githubを使う" → "GitHubを使う".
+  - **Links and code (review fix):** a whitespace-delimited token containing "://", "@", "/", "_" or a "." between two letters (a domain) is never changed: "github.com/acme", "a@jira.com" and "jira_client" stay as they are.
 - **Longest match first:** scanning left to right, at each position the longest candidate (by characters) wins. On a tie, the term higher in the list wins. Text that's been replaced is not scanned again (one pass), so a term's output can't trigger another rule.
 - **Speaker labels:** `[Speaker N]` labels are never altered.
-- **Speed:** the matcher is built once per list change. A one-minute transcript with 500 terms is corrected in under 5 ms on M1.
+- **Speed:** the matcher is built once per list change. A one-minute transcript with 500 terms is corrected in under 5 ms on M1 in a release build. The unit test uses `measure {}` rather than a wall-clock assertion, which was flaky in Debug builds on a busy machine.
 - **Placement:** this is `VocabularyStages`' `afterTranscription` stage, the first one, since Vocabulary's slot comes first in `PipelineStages.live` (groundwork `dictation-stages`, Decision 3). It runs after speaker labels are merged in, because the merge rebuilds the text, and before cleanup. As a result:
   - The faithfulness check compares against the corrected text, so cleanup output keeping "Paramount+" passes.
   - History's raw text keeps the speech model's original output (groundwork Decision 3). That's what makes "Add to vocabulary…" useful: the row shows how a word was misheard. The cleaned text has the corrected spellings.
@@ -70,13 +77,14 @@ The decisions behind this design were settled on 2026-10-01 (Q8–Q10, Q24, Q25,
   - Built with the loaded model's tokenizer: `tokenizer.encode(text:)`, keeping only tokens below `specialTokens.specialTokenBegin`.
   - Set as `DecodingOptions.promptTokens`, with `usePrefillPrompt = true` (already the default).
   - The engine caches the tokens for the last glossary, so an unchanged list isn't re-encoded on every dictation.
-- **WhisperKit 0.18.0 bug, worked around:** with any prompt, WhisperKit applies its blank filter (which stops end-of-text being the first token) at the prefill-cache index, which is 0 whenever prompt tokens are used, instead of at the first sampled token. Found by the integration test: every prompted dictation, even a one-token prompt, came back empty. `WhisperPromptBlankFilter` (a custom `LogitsFiltering`, installed on the decoder the first time a hint is built) suppresses end-of-text and a blank first token, but only in windows that start with `<|startofprev|>`, and only until the first word is sampled. Windows without a prompt are untouched. Drop it once WhisperKit fixes the index.
+- **WhisperKit 0.18.0 bug, worked around:** with any prompt, WhisperKit applies its blank filter (which stops end-of-text being the first token) at the prefill-cache index, which is 0 whenever prompt tokens are used, instead of at the first sampled token. Found by the integration test: every prompted dictation, even a one-token prompt, came back empty. `WhisperPromptBlankFilter` (a custom `LogitsFiltering`, installed on the decoder the first time a hint is built) suppresses end-of-text and a blank first token in windows that start with `<|startofprev|>`, and only at the first sampled position: right after the prefill, which ends with the timestamp (or no-timestamps) token. That's exactly what WhisperKit's own filter does without a prompt, and what OpenAI's reference does. Windows without a prompt are untouched. Drop it once WhisperKit fixes the index.
+  - **Review fix:** the first version kept suppressing end-of-text until a word was sampled. That forced Whisper to produce a word in a window with no speech (the trailing window of a dictation over 30 s), often a glossary term. An engine-level integration test now runs a sentence followed by 30 s of silence with a glossary and checks no glossary word is added.
 - **Side effects:**
   - The prompt disables WhisperKit's prefill KV cache, a small latency cost: about 70 ms on a 3 s clip on an M3 Max (0.80 s → 0.87 s), measured in the integration test.
   - Prompt text never appears in the transcript, because segment text starts at SOT.
   - Language detection with `detectLanguage` looks only at SOT, so detection is unaffected.
 - **"In speech hint" mark in the tab:**
-  - The tokenizer lives inside the speech engine, which the Settings tab can't reach, so the tab always uses an estimate: `WhisperHint.estimatedTermCount(_:)`, about one token per 4 characters, plus one for each separator.
+  - The tokenizer lives inside the speech engine, which the Settings tab can't reach, so the tab always uses an estimate: `WhisperHint.estimatedTermCount(_:)`, about one token per 4 characters, plus one for each separator. The spec says so too (review fix).
   - The tab says the mark is approximate. The exact cut is made with the real tokenizer at each dictation.
 
 ### 4. Prompt rule
@@ -85,6 +93,7 @@ The decisions behind this design were settled on 2026-10-01 (Q8–Q10, Q24, Q25,
 - **Prompt cache:** the rule changes the prompt, so the cleanup prefix cache is rebuilt when the list changes. That's fine, because edits are rare.
 - **Rewrites:** the rule is in `context.cleanupRules` for every dictation, so `rewrite-modes` adds it to every rewrite prompt by passing `context.cleanupRules` on (Q29). `VocabularyStore.promptRule` exposes the same text.
 - **Faithfulness:** the rule never relaxes the faithfulness check. It only steers the model towards the spellings already in the text.
+- **Protected terms (review fix):** the word comparison ignores letter case and characters like "+", so "Paramount+" → "Paramount" used to pass. `CleanupRequest.protectedTerms` (from `context.vocabularyTerms`) makes `CleanupService.accept` reject strict output with fewer exact occurrences of a term than its input. It applies only to `.strict`; rewrites, with faithfulness off, aren't checked.
 
 ### 5. Settings > Vocabulary tab
 - **Tab order (Q30):** General, Models, Dictation, **Vocabulary**, Rewrite, Apps, History, Privacy. Rewrite and Apps arrive in their own changes. Each change adds its own tab case, and the one-line conflict is resolved at merge.
@@ -101,6 +110,8 @@ The decisions behind this design were settled on 2026-10-01 (Q8–Q10, Q24, Q25,
     - Import… and Export… buttons sit here.
 - **Export:** writes the same JSON format via a save panel, by default `Honyaku Vocabulary.json`.
 - **Import:**
+  - Refuses files over 1 MB or with more than 2,000 terms, with "A word list can have at most 2,000 terms and be at most 1 MB. Your list is unchanged." (review fix: an unbounded file froze the app, and with it the Control listener).
+  - Merges in one pass using dictionaries keyed by folded spelling (term → index, spelling → owner), so the time is linear in the size of both lists.
   - Reads the JSON format, and merges by term, ignoring case:
     - An existing term gets the union of heard-as spellings, and its position and on/off state are kept.
     - A new term is appended at the end.
@@ -113,7 +124,7 @@ The decisions behind this design were settled on 2026-10-01 (Q8–Q10, Q24, Q25,
 ### 6. "Add to vocabulary…" on History rows
 - **Where:** a History row's context menu, and its visible action buttons, get "Add to vocabulary…".
 - **Sheet contents:**
-  - the transcript, selectable
+  - the transcript as the speech model heard it (`rawText`, review fix: it was the cleaned text, which already has the corrections and, for a rewrite, isn't the user's words at all), selectable
   - "Heard as", which can be left empty if only the case is wrong
   - "Write it as"
   - Cancel and Add

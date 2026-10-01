@@ -181,7 +181,10 @@ final class SettingsWindowController: NSObject {
     }
 
     private func makeWindow() -> NSWindow {
+        // The app's settings, which are a separate suite in tests and UI-test launches
+        let defaults = coordinator.features.defaults
         let tabs = SettingsTabViewController()
+        tabs.defaults = defaults
         tabs.tabStyle = .toolbar
         for tab in Tab.allCases {
             let hosting = NSHostingController(rootView: AnyView(coordinator.withSharedState(content(for: tab))))
@@ -193,7 +196,7 @@ final class SettingsWindowController: NSObject {
             item.identifier = tab.rawValue
             tabs.addTabViewItem(item)
         }
-        let saved = UserDefaults.standard.string(forKey: Self.lastTabKey).flatMap(Tab.init(rawValue:)) ?? .general
+        let saved = defaults.string(forKey: Self.lastTabKey).flatMap(Tab.init(rawValue:)) ?? .general
         tabs.selectedTabViewItemIndex = Tab.allCases.firstIndex(of: saved) ?? 0
 
         let window = NSWindow(contentViewController: tabs)
@@ -220,10 +223,12 @@ final class SettingsWindowController: NSObject {
 
 /// Resizes the window to each tab's own size, and remembers the last tab chosen.
 private final class SettingsTabViewController: NSTabViewController {
+    var defaults: UserDefaults = .standard
+
     override func tabView(_ tabView: NSTabView, didSelect tabViewItem: NSTabViewItem?) {
         super.tabView(tabView, didSelect: tabViewItem)
         if let id = tabViewItem?.identifier as? String {
-            UserDefaults.standard.set(id, forKey: SettingsWindowController.lastTabKey)
+            defaults.set(id, forKey: SettingsWindowController.lastTabKey)
         }
         fitWindow(animated: view.window?.isVisible ?? false)
     }

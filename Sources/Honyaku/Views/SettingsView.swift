@@ -535,7 +535,8 @@ private struct HistoryRow: View {
             Button("Add to vocabulary\u{2026}") { addingToVocabulary = true }
             Button("Delete", role: .destructive, action: onDelete)
         }
-        .addToVocabularySheet(transcript: entry.cleanedText, isPresented: $addingToVocabulary)
+        // As the speech model heard it: that's where the misheard word is
+        .addToVocabularySheet(transcript: entry.rawText, isPresented: $addingToVocabulary)
     }
 
     private func copy() {

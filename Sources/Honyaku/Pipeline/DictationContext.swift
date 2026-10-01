@@ -109,6 +109,9 @@ struct DictationContext: Sendable {
     var speechHints = SpeechHints.none
     /// Extra lines for the cleanup prompt.
     var cleanupRules: [String] = []
+    /// Every enabled vocabulary term, as written, for any engine and language. Formatting leaves these
+    /// alone and cleanup must keep them (`speechHints.glossary` is only the Whisper hint).
+    var vocabularyTerms: [String] = []
 
     init(mode: DictationMode = .dictate, appAtStart: TargetApp? = nil, firstRunTestSession: Int? = nil) {
         self.mode = mode

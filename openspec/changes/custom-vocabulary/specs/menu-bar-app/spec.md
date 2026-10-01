@@ -22,7 +22,9 @@ The tab SHALL refuse:
 - a term already in the list (ignoring case), with "Already in your list"
 - a heard-as spelling already used by another term, naming that term
 
-When the Whisper tokenizer isn't loaded, the hint mark SHALL be labelled approximate.
+The hint mark SHALL always be an estimate, and SHALL be labelled approximate: the exact cut is made with Whisper's tokenizer at each dictation.
+
+When a change to the list can't be saved, the tab SHALL say so, and the change SHALL stay in effect until Honyaku quits.
 
 #### Scenario: User adds a term
 - **WHEN** the user adds "Paramount+" heard as "paramount plus"
@@ -43,6 +45,11 @@ When the Whisper tokenizer isn't loaded, the hint mark SHALL be labelled approxi
 - **WHEN** Honyaku starts
 - **THEN** the file is kept as `vocabulary.corrupt-<date>.json`, the list starts empty, the Vocabulary tab explains what happened, and dictation keeps working
 
+#### Scenario: The damaged file can't be set aside
+- **GIVEN** `vocabulary.json` is corrupt and can't be renamed
+- **WHEN** Honyaku starts
+- **THEN** the tab reads "Couldn't set aside the damaged vocabulary file. Changes won't be saved until it's fixed or removed.", and Honyaku never overwrites that file
+
 ---
 
 ### Requirement: The vocabulary can be exported and imported
@@ -52,12 +59,16 @@ The Vocabulary tab SHALL export the list as a JSON file, and SHALL import such a
 - **Nothing is deleted.**
 - **Clashes:** a heard-as spelling already used by another term is skipped.
 
-After an import, the tab SHALL summarise how many terms were added, updated and skipped. A file that isn't a valid vocabulary file SHALL leave the list unchanged and show an error.
+After an import, the tab SHALL summarise how many terms were added, updated and skipped. A file that isn't a valid vocabulary file SHALL leave the list unchanged and show an error. A file larger than 1 MB, or with more than 2,000 terms, SHALL be refused with an error saying so, leaving the list unchanged. Merging SHALL take time proportional to the size of the lists, so an import never freezes the app.
 
 #### Scenario: Colleague's list imported
 - **GIVEN** the list has "Jira" heard as "jeera"
 - **WHEN** the user imports a file with "Jira" heard as "gira", and "Pluto TV"
 - **THEN** "Jira" is heard as "jeera" and "gira", "Pluto TV" is added at the end, and the summary reads "Added 1 term, updated 1"
+
+#### Scenario: Too large a file
+- **WHEN** the user imports a file with 5,000 terms
+- **THEN** the list is unchanged and the error says a word list can have at most 2,000 terms
 
 #### Scenario: Wrong file
 - **WHEN** the user imports a file that isn't a vocabulary file
@@ -66,7 +77,7 @@ After an import, the tab SHALL summarise how many terms were added, updated and 
 ---
 
 ### Requirement: A History row can add a term to the vocabulary
-Each History row SHALL offer "Add to vocabulary…", in its context menu and among its visible actions. It opens a sheet that shows the transcript, with:
+Each History row SHALL offer "Add to vocabulary…", in its context menu and among its visible actions. It opens a sheet that shows the transcript as the speech model heard it (the raw text, before corrections, cleanup or a rewrite), with:
 - a "Heard as" field, optional
 - a "Write it as" field
 - Cancel and Add

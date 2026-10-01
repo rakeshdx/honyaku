@@ -45,3 +45,17 @@
 
 - [x] 7.1 `xcodegen generate`; clean build with no warnings in project code; unit tests (229 pass; history.json unchanged and no vocabulary.json created); UI tests (5 pass); the Whisper glossary integration test; `openspec validate custom-vocabulary --strict` (every build and test through the shared build lock)
 - [ ] 7.2 Developer: dictate with Parakeet and Whisper using a real list; check the Whisper hint doesn't echo terms on short clips; import and export a list
+
+## 8. Review fixes
+
+- [x] 8.1 `context.vocabularyTerms` (every enabled term, any engine or language) and a per-dictation `VocabularySnapshot` used by the correction stage
+- [x] 8.2 Matcher: contractions rejected (possessive kept), links/emails/paths/identifiers untouched, script changes and CJK as boundaries; tests
+- [x] 8.3 `WhisperPromptBlankFilter` acts only at the first sampled position; engine-level integration test with 30 s of silence after a sentence
+- [x] 8.4 `CleanupRequest.protectedTerms`: strict cleanup output losing an exact term occurrence is rejected; tests
+- [x] 8.5 Import: 1 MB / 2,000-term limits with a clear error; linear merge; tests (2,000 terms, no wall-clock assertion)
+- [x] 8.6 Corrupt file that can't be set aside: different notice, saving stops; save failures logged with `Logger` and shown in the tab
+- [x] 8.7 "Add to vocabulary…" shows the raw text
+- [x] 8.8 Matcher performance test uses `measure {}`; spec says the hint mark is always an estimate
+- [x] 8.9 The last Settings tab is stored in the app's settings suite (`coordinator.features.defaults`), the same change as rewrite-modes, so UI tests never write the user's real settings
+- [x] 8.10 Advisories: unused `VocabularyMatcher.isEmpty` removed; the term editor sheet in its own file; tests leave no temporary folders or suites behind
+- [x] 8.11 Gates: clean build with no warnings in project code; 246 unit tests (history.json unchanged); 5 UI tests (the real settings file untouched); both vocabulary integration tests (models folder unchanged); `openspec validate --strict`

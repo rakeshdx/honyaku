@@ -64,6 +64,15 @@ enum VocabularyError: Error, Equatable, LocalizedError {
     }
 }
 
+/// Why an import was refused before reading the terms.
+enum VocabularyImportError: Error, Equatable, LocalizedError {
+    case tooLarge
+
+    var errorDescription: String? {
+        "A word list can have at most 2,000 terms and be at most 1 MB. Your list is unchanged."
+    }
+}
+
 /// What an import changed, for the summary shown afterwards.
 struct VocabularyImportSummary: Equatable {
     var added = 0
