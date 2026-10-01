@@ -84,11 +84,6 @@ actor CleanupService: CleanupServiceProtocol {
         return output
     }
 
-    /// `englishFillers`: whether um/uh and the set-off English fillers may be dropped. Only for English
-    /// transcripts: "um" is a real word in German and Portuguese.
-    func clean(_ rawText: String, prompt: String, englishFillers: Bool = true) async throws -> String {
-        try await clean(rawText, request: CleanupRequest(systemPrompt: prompt, englishFillers: englishFillers))
-    }
 
     func clean(_ rawText: String, request: CleanupRequest) async throws -> String {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

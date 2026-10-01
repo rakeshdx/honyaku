@@ -3,8 +3,10 @@ import AppKit
 /// Where a finished dictation's text goes.
 enum DictationDestination: Equatable {
     case paste
-    /// Honyaku itself is in front: ⌘V would paste into its own window
-    case saveOnly
+    /// Saved to History, not pasted: Honyaku itself is in front, or the app is set to History only
+    case saveOnly(notice: String?)
+    /// A password field has focus: not pasted, not saved, nothing written to the pasteboard
+    case blocked(notice: String)
     case firstRunTest
     /// Started in a first-run test that has since ended: never pasted, never saved
     case discard
@@ -45,8 +47,10 @@ final class TranscriptionPipeline {
     /// Settings read on every dictation: `.standard` in the app, a private suite in tests.
     private let defaults: UserDefaults
 
+    /// The app passes `PipelineStages.live(features)`; tests pass the stages they exercise (none by default).
     init(appState: AppState, transcriptStore: TranscriptStore, services: PipelineServices? = nil,
-         stages: PipelineStages? = nil, defaults: UserDefaults = .standard) {
+         stages: PipelineStages? = nil, defaults: UserDefaults = .standard,
+         pasteboardClearDelay: Double = 5.0) {
         let services = services ?? .live(appState: appState)
         audioCapture = services.audioCapture
         transcription = services.transcription
@@ -55,10 +59,11 @@ final class TranscriptionPipeline {
         paste = services.paste
         models = services.models
         targets = services.targets
-        self.stages = stages ?? .live
+        self.stages = stages ?? .none
         self.appState = appState
         self.transcriptStore = transcriptStore
         self.defaults = defaults
+        self.pasteboardClearDelay = pasteboardClearDelay
         audioCapture.prepare()
         audioCapture.onLevel = { [weak appState] level in
             MainActor.assumeIsolated { appState?.inputLevel = level }
@@ -91,7 +96,7 @@ final class TranscriptionPipeline {
         // on the first dictation. Warm-up itself still never downloads.
         let migrated: [String: String] = ["selectedSpeechModelID": modelID,
                                           "selectedCleanupModelID": appState.selectedCleanupModelID]
-        for (key, id) in migrated where AppState.migratedSelectionKeys.contains(key) {
+        for (key, id) in migrated where appState.migratedSelectionKeys.contains(key) {
             if let model = ModelRegistry.model(id: id) { models.startDownload(model) }
         }
         let transcription = transcription
@@ -104,16 +109,20 @@ final class TranscriptionPipeline {
 
     // MARK: - Routing
 
-    static let savedWhileInFrontMessage = "Saved to History — Honyaku was in front"
+    nonisolated static let savedWhileInFrontMessage = "Saved to History — Honyaku was in front"
+    nonisolated static let passwordFieldMessage = "Not pasted: a password field is focused"
 
-    /// `recordedInTest` is the first-run test running when the recording started; `currentTest` is the
-    /// one running now. A test result only reaches the window if that same test is still on screen.
-    nonisolated static func destination(recordedInTest: Int?, currentTest: Int?,
-                                        honyakuIsFrontmost: Bool) -> DictationDestination {
-        if let recordedInTest {
+    /// `context.firstRunTestSession` is the first-run test running when the recording started; `currentTest`
+    /// is the one running now. A test result only reaches the window if that same test is still on screen.
+    /// The password guard comes before "Honyaku in front", so Honyaku's own token field is blocked, not saved.
+    nonisolated static func destination(for context: DictationContext, currentTest: Int?) -> DictationDestination {
+        if let recordedInTest = context.firstRunTestSession {
             return recordedInTest == currentTest ? .firstRunTest : .discard
         }
-        return honyakuIsFrontmost ? .saveOnly : .paste
+        if context.isSecureField { return .blocked(notice: passwordFieldMessage) }
+        if context.honyakuIsFrontmost { return .saveOnly(notice: savedWhileInFrontMessage) }
+        if !context.pasteAllowed { return .saveOnly(notice: context.pasteOffNotice) }
+        return .paste
     }
 
     // MARK: - Recording lifecycle
@@ -149,6 +158,7 @@ final class TranscriptionPipeline {
         if let mode { context.mode = mode }
 
         return Task {
+            var clearPasteboard = false
             do {
                 let (audioURL, floatArray) = try audioCapture.stopCaptureAndFlushBoth()
                 try await run(audioURL: audioURL, floatArray: floatArray, context: context)
@@ -156,10 +166,15 @@ final class TranscriptionPipeline {
                 appState.setError("Honyaku needs microphone access. Turn it on in System Settings → Privacy & Security → Microphone.")
             } catch {
                 appState.setError("The dictation didn't finish: \(error.localizedDescription) Try again.")
-                await paste.clearTranscriptFromPasteboard(after: pasteboardClearDelay)
+                clearPasteboard = true
             }
+            // Settle the status before waiting: once it's an error (not busy), a new recording can start, and
+            // nothing this run does afterwards may touch the status
             if case .error = appState.status {} else {
                 appState.status = .idle
+            }
+            if clearPasteboard {
+                await paste.clearTranscriptFromPasteboard(after: pasteboardClearDelay)
             }
         }
     }
@@ -175,7 +190,8 @@ final class TranscriptionPipeline {
 
     // MARK: - Private pipeline
 
-    private let pasteboardClearDelay: Double = 5.0
+    /// How long a failed dictation's transcript may stay on the pasteboard before it's cleared.
+    private let pasteboardClearDelay: Double
 
     private func run(audioURL: URL, floatArray: [Float], context startContext: DictationContext) async throws {
         var context = startContext
@@ -196,6 +212,8 @@ final class TranscriptionPipeline {
             appState.setError(models.downloadMessage(for: speechModel))
             return
         }
+        context.speechModelID = modelID
+        context.speechHints.language = TranscriptionService.dictationLanguage(in: defaults)
         for preparer in stages.preparers { preparer.prepare(&context) }
         let result = try await transcription.transcribe(audioURL: audioURL, samples16k: floatArray, modelID: modelID,
                                                         hints: context.speechHints)
@@ -227,10 +245,10 @@ final class TranscriptionPipeline {
             }
         }
         // After the speaker merge, which rebuilds the text from the speech model's segments
-        labeledText = PipelineStages.apply(stages.afterTranscription, to: labeledText, context: context)
+        labeledText = PipelineStages.apply(stages.afterTranscription, to: labeledText, context: &context)
 
         // Step 3: Cleanup (optional)
-        var finalText = await llmStage(labeledText, context: context)
+        var finalText = await llmStage(labeledText, context: &context)
 
         // In English, um/umm/uh/hmm are never content, whatever the model (or no model) left in
         if context.englishFillers { finalText = CleanupService.removeUnambiguousFillers(finalText) }
@@ -241,33 +259,33 @@ final class TranscriptionPipeline {
         context.appAtPaste = target.app
         context.honyakuIsFrontmost = target.honyakuIsFrontmost
         context.isSecureField = target.isSecureField
-        finalText = PipelineStages.apply(stages.final, to: finalText, context: context)
-        guard !finalText.isEmpty else {
+        finalText = PipelineStages.apply(stages.final, to: finalText, context: &context)
+        // A stage may have left only whitespace (e.g. a lone "." dropped): nothing worth pasting
+        guard !finalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             appState.status = .idle
             return
         }
 
-        let destination = Self.destination(recordedInTest: context.firstRunTestSession,
-                                           currentTest: appState.firstRunTestSession,
-                                           honyakuIsFrontmost: context.honyakuIsFrontmost)
+        let destination = Self.destination(for: context, currentTest: appState.firstRunTestSession)
+        let routingNotice: String?
         switch destination {
         case .discard:
             appState.status = .idle
             return
         case .firstRunTest:
-            // First run's "Try it" step shows the result in the window: no paste, no history
+            // First run's "Try it" step shows the result in the window: no paste, no history, no notices
             appState.firstRunTestTranscript = finalText
             return
-        case .saveOnly:
-            break
+        case .blocked(let notice):
+            // Nothing is pasted, saved or written to the pasteboard
+            showNotices([notice] + context.notices)
+            return
+        case .saveOnly(let notice):
+            routingNotice = notice
         case .paste:
-            // Step 4: Paste
-            do {
-                try await paste.paste(finalText)
-            } catch {
-                await paste.clearTranscriptFromPasteboard(after: pasteboardClearDelay)
-                throw error
-            }
+            // Step 4: Paste. A failure throws at once; the caller reports it and clears the pasteboard
+            try await paste.paste(finalText)
+            routingNotice = nil
         }
 
         // Step 5: Persist to history (no content in log messages)
@@ -278,15 +296,23 @@ final class TranscriptionPipeline {
             durationSeconds: result.durationSeconds,
             hasSpeakerLabels: !segments.isEmpty,
             mode: context.mode.id,
-            appBundleID: context.appAtPaste?.bundleID
+            // Honyaku isn't where the text went when its own window was in front
+            appBundleID: context.honyakuIsFrontmost ? nil : context.appAtPaste?.bundleID
         )
         transcriptStore.save(entry)
-        if destination == .saveOnly { appState.setError(Self.savedWhileInFrontMessage) }
+        showNotices([routingNotice].compactMap { $0 } + context.notices)
+    }
+
+    /// Shows the run's messages once, at its end, the way errors are shown (orange, on the icon, the
+    /// capsule and the General tab). The status stays busy until here, so no recording can start early.
+    private func showNotices(_ notices: [String]) {
+        guard !notices.isEmpty else { return }
+        appState.setError(notices.joined(separator: " "))
     }
 
     /// The model step: word-for-word cleanup when it's on and its model is installed; otherwise the text
     /// as it is. Any failure falls back to the text it was given.
-    private func llmStage(_ text: String, context: DictationContext) async -> String {
+    private func llmStage(_ text: String, context: inout DictationContext) async -> String {
         guard appState.cleanupEnabled else { return text }
         let cleanupModel = ModelRegistry.model(
             id: defaults.string(forKey: "selectedCleanupModelID") ?? appState.selectedCleanupModelID)

@@ -76,6 +76,7 @@ Cleanup runs with **temperature 0.0** (greedy decoding) for deterministic, faith
 - No audio, transcripts, or speaker data ever leaves your Mac
 - Models are downloaded once from Hugging Face; all runtime inference is offline
 - Transcript history stored at `~/Library/Application Support/Honyaku/history.json` (permissions 600, excluded from iCloud and backups)
+- Each history entry also records which app the text went to (its bundle ID, such as `com.tinyspeck.slackmacgap`); it stays in the same local file
 - You can clear all history at any time from Settings → History
 
 ## Building from source

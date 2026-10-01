@@ -16,7 +16,7 @@ final class ModelDownloads: ModelAvailability {
     func isRunning(_ model: ModelInfo) -> Bool { running.contains(model.id) }
 
     /// Starts downloading `model` unless it's installed or already downloading.
-    func start(_ model: ModelInfo) {
+    func startDownload(_ model: ModelInfo) {
         guard !ModelInstaller.isInstalled(model), running.insert(model.id).inserted else { return }
         appState.modelDownloads[model.id] = 0
         let installer = installer
@@ -39,12 +39,8 @@ final class ModelDownloads: ModelAvailability {
 
     func isInstalled(_ model: ModelInfo) -> Bool { ModelInstaller.isInstalled(model) }
 
-    func startDownload(_ model: ModelInfo) { start(model) }
-
-    func downloadMessage(for model: ModelInfo) -> String { message(for: model) }
-
     /// "Downloading Parakeet TDT 0.6B v2, 42%"
-    func message(for model: ModelInfo) -> String {
+    func downloadMessage(for model: ModelInfo) -> String {
         let percent = Int(((appState.modelDownloads[model.id] ?? 0) * 100).rounded())
         return "Downloading \(model.displayName), \(percent)%. Dictation works once it finishes."
     }

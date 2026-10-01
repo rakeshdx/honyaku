@@ -174,6 +174,11 @@ actor TranscriptionService: ASRService {
     /// UserDefaults key for the multilingual model's dictation language: a Whisper language code, or absent for Auto-detect.
     static let dictationLanguageKey = "dictationLanguage"
 
+    /// The dictation language saved in `defaults`, or nil for Auto-detect (Settings stores that as "").
+    static func dictationLanguage(in defaults: UserDefaults) -> String? {
+        defaults.string(forKey: dictationLanguageKey).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     /// The languages Whisper supports, by display name, one entry per code (the table has aliases).
     static let dictationLanguages: [(name: String, code: String)] = {
         var seen = Set<String>()

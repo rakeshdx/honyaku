@@ -1,47 +1,52 @@
 import XCTest
 @testable import Honyaku
 
+/// Every test here uses a temporary history file: never the user's real history.json.
 @MainActor
 final class TranscriptStoreTests: XCTestCase {
+    private var folder: URL!
+    private var fileURL: URL { folder.appendingPathComponent("Honyaku/history.json") }
+
+    override func setUpWithError() throws {
+        folder = FileManager.default.temporaryDirectory.appendingPathComponent("HonyakuStoreTests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: folder)
+    }
 
     func testHistoryFileSavedWithRestrictivePermissions() async throws {
-        let store = TranscriptStore()
-        let entry = TranscriptEntry(
-            rawText: "um hello world",
-            cleanedText: "hello world",
-            modelTier: "whisper-small-en",
-            durationSeconds: 2.5
-        )
-        store.save(entry)
-
-        let fileURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Honyaku/history.json")
+        let store = TranscriptStore(fileURL: fileURL)
+        store.save(TranscriptEntry(rawText: "um hello world", cleanedText: "hello world",
+                                   modelTier: "whisper-small-en", durationSeconds: 2.5))
 
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             XCTFail("history.json not found after save")
             return
         }
-
-        let attrs = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-        let perms = attrs[.posixPermissions] as? Int ?? 0
+        let perms = try FileManager.default.attributesOfItem(atPath: fileURL.path)[.posixPermissions] as? Int ?? 0
         XCTAssertEqual(perms, 0o600, "history.json must have permissions 600 (owner rw only)")
     }
 
-    func testHistoryFileExcludedFromBackup() throws {
-        let fileURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Honyaku")
-
-        guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
-
-        let rv = try fileURL.resourceValues(forKeys: [.isExcludedFromBackupKey])
+    func testHistoryFolderExcludedFromBackup() throws {
+        _ = TranscriptStore(fileURL: fileURL)
+        let rv = try fileURL.deletingLastPathComponent().resourceValues(forKeys: [.isExcludedFromBackupKey])
         XCTAssertEqual(rv.isExcludedFromBackup, true, "Honyaku directory must be excluded from backup")
     }
 
     func testClearAllRemovesEntries() {
-        let store = TranscriptStore()
+        let store = TranscriptStore(fileURL: fileURL)
         store.save(TranscriptEntry(rawText: "test", cleanedText: "test", modelTier: "m", durationSeconds: 1))
         store.clearAll()
         XCTAssertTrue(store.entries.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    func testCorruptHistoryLoadsEmptyWithoutCrashing() throws {
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: fileURL)
+        XCTAssertTrue(TranscriptStore(fileURL: fileURL).entries.isEmpty)
     }
 }
 

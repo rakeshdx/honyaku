@@ -119,14 +119,23 @@ final class ModelInstallerTests: XCTestCase {
         }
     }
 
-    func testDeletingAModelWithAnEmptyVariantIsRefused() async throws {
+    func testDeletingAModelWithAnEmptyVariantIsRefused() throws {
+        // Asks only which folder a delete would remove, against temporary bases: never the real models
         let bad = ModelInfo(id: "bad-whisper", type: .speech, engine: .whisperKit, displayName: "Bad",
                             hfRepoPath: "argmaxinc/whisperkit-coreml", fileNames: [], sizeMB: 1, tier: "x", notes: "",
                             sha256Checksums: [:], whisperVariant: "")
-        do {
-            try await ModelInstaller().delete(bad)
-            XCTFail("An empty variant names the whole WhisperKit folder and must be refused")
-        } catch {}
+        XCTAssertThrowsError(try ModelInstaller.deletionFolder(for: bad, modelsBase: root, documents: root),
+                             "An empty variant names the whole WhisperKit folder and must be refused")
+    }
+
+    func testDeletionFoldersStayInsideTheModelsOwnFolder() throws {
+        let cleanup = try XCTUnwrap(ModelRegistry.model(id: "qwen3-1.7b"))
+        XCTAssertEqual(try ModelInstaller.deletionFolder(for: cleanup, modelsBase: root, documents: root),
+                       root.appendingPathComponent("cleanup/qwen3-1.7b", isDirectory: true))
+        let whisper = try XCTUnwrap(ModelRegistry.speechModels.first { $0.engine == .whisperKit })
+        let folder = try XCTUnwrap(try ModelInstaller.deletionFolder(for: whisper, modelsBase: root, documents: root))
+        XCTAssertTrue(folder.path.hasPrefix(root.appending(path: "huggingface/models").path))
+        XCTAssertNotEqual(folder.lastPathComponent, "whisperkit-coreml", "Never the whole WhisperKit folder")
     }
 
     // MARK: - Helpers

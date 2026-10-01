@@ -20,7 +20,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 final class AppCoordinator {
     let appState: AppState
     let permissionManager = PermissionManager()
-    let transcriptStore = TranscriptStore()
+    let transcriptStore: TranscriptStore
+    /// Where features keep their settings; shared by the pipeline and the Settings tabs.
+    let features: FeatureEnvironment
 
     private let hotkeyService = HotkeyService()
     private let singleInstanceService = SingleInstanceService()
@@ -49,8 +51,25 @@ final class AppCoordinator {
             "selectedCleanupModelID": ModelRegistry.defaultCleanupModelID,
             "diarizationEnabled": false,
         ])
-        appState = AppState()
+        if Self.isHostingTests || Self.isUITesting {
+            // Tests never touch the user's data: history in memory, settings in a separate suite wiped at
+            // launch, feature files in a temporary folder
+            let defaults = UserDefaults(suiteName: Self.testSettingsSuite) ?? .standard
+            defaults.removePersistentDomain(forName: Self.testSettingsSuite)
+            appState = AppState(defaults: defaults)
+            transcriptStore = TranscriptStore(inMemory: [])
+            features = FeatureEnvironment(
+                directory: FileManager.default.temporaryDirectory.appending(path: "honyaku-tests-\(UUID().uuidString)"),
+                defaults: defaults)
+        } else {
+            appState = AppState()
+            transcriptStore = TranscriptStore()
+            features = .live()
+        }
     }
+
+    /// Settings for the test host and UI-test launches; never the user's `com.honyaku.app`.
+    static let testSettingsSuite = "com.honyaku.app.tests"
 
     static var isHostingTests: Bool { ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil }
 
@@ -75,6 +94,10 @@ final class AppCoordinator {
         }
         // Newest instance wins: quit any older copies before this one installs its event tap
         singleInstanceService.start()
+        // Unit tests are hosted in the app: no menu bar icon, capsule, Control listener or model loads, and no
+        // temp-file or quit cleanup, which could reach a dictation in the user's running copy
+        guard !Self.isHostingTests else { return }
+
         // Clean up any orphaned temp audio files from a previous crash
         TranscriptionService.cleanupOrphanedTempFiles()
         registerLoginItemIfNeeded()
@@ -83,9 +106,6 @@ final class AppCoordinator {
         ) { _ in
             Task { @MainActor in AppCoordinator.performQuitCleanup() }
         }
-
-        // Unit tests are hosted in the app: no menu bar icon, capsule, Control listener or model loads
-        guard !Self.isHostingTests else { return }
 
         statusItem = StatusItemController(
             onOpen: { [unowned self] in openFromMenuBar() },
@@ -148,7 +168,8 @@ final class AppCoordinator {
 
         // Create the pipeline once
         if pipeline == nil {
-            let p = TranscriptionPipeline(appState: appState, transcriptStore: transcriptStore)
+            let p = TranscriptionPipeline(appState: appState, transcriptStore: transcriptStore,
+                                          stages: .live(features))
             pipeline = p
             hotkeyService.onRecordingStarted = { mode in p.startRecording(mode: mode) }
             hotkeyService.onRecordingEnded   = { mode in _ = p.stopRecordingAndProcess(mode: mode) }
@@ -211,6 +232,7 @@ final class AppCoordinator {
     /// Wraps a tab or window's SwiftUI content with the shared state it reads.
     func withSharedState<V: View>(_ view: V) -> some View {
         view.environment(appState)
+            .environment(features)
             .environmentObject(permissionManager)
             .environmentObject(transcriptStore)
             .tint(Theme.ai)

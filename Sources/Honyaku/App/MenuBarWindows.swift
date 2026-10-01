@@ -14,10 +14,13 @@ final class StatusItemController: NSObject {
         let menu = NSMenu()
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
+        // Identifiers tell this menu apart from the app's main menu, which has the same titles (UI tests)
+        settings.identifier = NSUserInterfaceItemIdentifier("statusMenu.settings")
         menu.addItem(settings)
         menu.addItem(.separator())
         let quit = NSMenuItem(title: "Quit Honyaku", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
+        quit.identifier = NSUserInterfaceItemIdentifier("statusMenu.quit")
         menu.addItem(quit)
         return menu
     }()

@@ -26,8 +26,8 @@ final class TranscriptStoreRedesignTests: XCTestCase {
     }
 
     func testInMemoryStoreNeverTouchesHistoryFile() {
-        let file = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Honyaku/history.json")
+        // Reads the user's history file only to compare it; the in-memory store must never write it
+        let file = TranscriptStore.defaultFileURL
         let before = try? Data(contentsOf: file)
         let store = TranscriptStore(inMemory: [])
         store.save(entry("never persisted"))
@@ -107,9 +107,17 @@ final class StatusItemSymbolTests: XCTestCase {
 }
 
 final class DictationDestinationTests: XCTestCase {
-    private func destination(_ recorded: Int?, _ current: Int?, front: Bool = false) -> DictationDestination {
-        TranscriptionPipeline.destination(recordedInTest: recorded, currentTest: current, honyakuIsFrontmost: front)
+    private func destination(_ recorded: Int?, _ current: Int?, front: Bool = false, secure: Bool = false,
+                             pasteAllowed: Bool = true, pasteOffNotice: String? = nil) -> DictationDestination {
+        var context = DictationContext(firstRunTestSession: recorded)
+        context.honyakuIsFrontmost = front
+        context.isSecureField = secure
+        context.pasteAllowed = pasteAllowed
+        context.pasteOffNotice = pasteOffNotice
+        return TranscriptionPipeline.destination(for: context, currentTest: current)
     }
+
+    private let savedInFront = DictationDestination.saveOnly(notice: TranscriptionPipeline.savedWhileInFrontMessage)
 
     func testOrdinaryDictationPastes() {
         XCTAssertEqual(destination(nil, nil), .paste)
@@ -135,15 +143,38 @@ final class DictationDestinationTests: XCTestCase {
     }
 
     func testHonyakuInFrontSavesWithoutPasting() {
-        XCTAssertEqual(destination(nil, nil, front: true), .saveOnly)
-        XCTAssertEqual(destination(nil, 4, front: true), .saveOnly)
+        XCTAssertEqual(destination(nil, nil, front: true), savedInFront)
+        XCTAssertEqual(destination(nil, 4, front: true), savedInFront)
+    }
+
+    func testPasswordFieldBlocksEvenWhenHonyakuIsInFront() {
+        let blocked = DictationDestination.blocked(notice: TranscriptionPipeline.passwordFieldMessage)
+        XCTAssertEqual(destination(nil, nil, secure: true), blocked)
+        // Honyaku's own token field is a password field: blocked, not saved
+        XCTAssertEqual(destination(nil, nil, front: true, secure: true), blocked)
+    }
+
+    func testFirstRunTestWinsOverThePasswordGuard() {
+        XCTAssertEqual(destination(3, 3, secure: true), .firstRunTest)
+        XCTAssertEqual(destination(3, nil, secure: true), .discard)
+    }
+
+    func testPasteTurnedOffSavesWithItsNotice() {
+        XCTAssertEqual(destination(nil, nil, pasteAllowed: false, pasteOffNotice: "Saved to History — paste is off for Slack"),
+                       .saveOnly(notice: "Saved to History — paste is off for Slack"))
+        XCTAssertEqual(destination(nil, nil, pasteAllowed: false), .saveOnly(notice: nil))
+        // Honyaku in front keeps its own message
+        XCTAssertEqual(destination(nil, nil, front: true, pasteAllowed: false, pasteOffNotice: "x"), savedInFront)
     }
 }
 
 @MainActor
 final class FirstRunTestSessionTests: XCTestCase {
-    func testEachTestGetsANewSessionAndEndingClearsTheResult() {
-        let state = AppState()
+    func testEachTestGetsANewSessionAndEndingClearsTheResult() throws {
+        let suite = "HonyakuFirstRunTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let state = AppState(defaults: defaults)
         state.beginFirstRunTest()
         let first = state.firstRunTestSession
         XCTAssertNotNil(first)

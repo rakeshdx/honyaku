@@ -52,10 +52,14 @@ final class AppState {
         self.defaults = defaults
         cleanupEnabled = (defaults.object(forKey: "cleanupEnabled") as? Bool) ?? true
         diarizationEnabled = (defaults.object(forKey: "diarizationEnabled") as? Bool) ?? false
-        selectedSpeechModelID = AppState.resolvedSelection(
+        let speech = AppState.resolvedSelection(
             key: "selectedSpeechModelID", fallback: ModelRegistry.defaultSpeechModelID, defaults: defaults)
-        selectedCleanupModelID = AppState.resolvedSelection(
+        let cleanup = AppState.resolvedSelection(
             key: "selectedCleanupModelID", fallback: ModelRegistry.defaultCleanupModelID, defaults: defaults)
+        selectedSpeechModelID = speech.id
+        selectedCleanupModelID = cleanup.id
+        migratedSelectionKeys = Set([speech.migrated ? "selectedSpeechModelID" : nil,
+                                     cleanup.migrated ? "selectedCleanupModelID" : nil].compactMap { $0 })
         cleanupPrompt = defaults.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt
         setupComplete = defaults.bool(forKey: "setupComplete")
     }
@@ -63,19 +67,17 @@ final class AppState {
     /// Reads a saved model selection, migrating a retired ID and writing the result back so services
     /// that read UserDefaults directly (CleanupService) see the same model.
     nonisolated static func resolvedSelection(key: String, fallback: String,
-                                              defaults: UserDefaults = .standard) -> String {
+                                              defaults: UserDefaults) -> (id: String, migrated: Bool) {
         let saved = defaults.string(forKey: key)
         let resolved = ModelRegistry.resolvedID(saved, fallback: fallback)
-        if saved != nil, saved != resolved {
-            defaults.set(resolved, forKey: key)
-            migratedSelectionKeys.insert(key)
-        }
-        return resolved
+        guard saved != nil, saved != resolved else { return (resolved, false) }
+        defaults.set(resolved, forKey: key)
+        return (resolved, true)
     }
 
-    /// Selections migrated from a retired model this launch, so the pipeline can fetch the new models
-    /// straight away. A static because property initialisers can't reach the instance.
-    nonisolated(unsafe) static var migratedSelectionKeys: Set<String> = []
+    /// Selections this state migrated from a retired model when it loaded, so the pipeline can fetch the
+    /// new models straight away.
+    @ObservationIgnored let migratedSelectionKeys: Set<String>
 
     // Live recording feedback for the keycap and capsule
     /// 0–1 input level while recording, updated at most ~30 times a second.
