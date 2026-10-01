@@ -10,7 +10,7 @@ Right before every paste, the system SHALL check the focused text field and the 
 
 A blocked transcript SHALL NOT be written to the pasteboard, pasted or saved to history. The status SHALL read "Not pasted: a password field is focused". The status SHALL NOT include the transcript, and the transcript SHALL NOT be logged.
 
-A warning SHALL show "Pasted. Note: <App> has secure input on" without the error colour.
+A warning SHALL show "Pasted. Note: <App> has secure input on" once the text is pasted, the same way other dictation notices are shown, until the next dictation starts.
 
 The check SHALL run before the "Honyaku was in front" routing, so text dictated into Honyaku's own token field is blocked rather than saved.
 

@@ -8,14 +8,14 @@ Honyaku pastes with a simulated ⌘V into whatever app is in front (`PasteServic
 - Honyaku in front → History only
 - paste
 
-**Groundwork.** The `dictation-stages` change, which merges first, adds:
-- `DictationContext`: the target app captured at recording start and refreshed at paste time, and an `isSecureField` slot
-- `AppCategory`: a list of known bundle IDs per category
-- a final `TextStage` list in the pipeline
-- injectable services, so `run()` is unit-tested with fakes
-- an optional `TranscriptEntry.appBundleID`
-
-This design uses those planned names. If the groundwork merges with different names, the implementation follows the merged code.
+**Groundwork (merged as `dictation-stages`, PR #7).** This change plugs into:
+- `DictationContext`: `appAtPaste` (a `TargetApp` with bundle ID, PID, name and `AppCategory`, read right before the final stages), `honyakuIsFrontmost`, `isSecureField`, `pasteAllowed`, `pasteOffNotice` and `notices`
+- `AppCategory`: the known-bundle-ID table (terminal, codeEditor, chat, email, browser, other)
+- `PerAppStages.make(_:)` in `Pipeline/Stages/PerAppStages.swift`: this feature's only entry into the pipeline. Its `final` stages run after Rewrite's and take the context `inout`
+- `TranscriptionPipeline.destination(for:currentTest:)`: first-run test → `isSecureField` → `.blocked(notice:)` → Honyaku in front → `.saveOnly(notice:)` → `!pasteAllowed` → `.saveOnly(notice: pasteOffNotice)` → `.paste`
+- Notices in `context.notices` are shown once after routing, the way errors are (orange, on the icon, capsule and General tab), until the next dictation starts
+- `FeatureEnvironment.store(_:)`: one shared `FeatureStore` per feature, created from the environment's directory (a temp folder in tests and UI-test launches)
+- `TranscriptEntry.appBundleID`, already filled in from `appAtPaste` (nil when Honyaku was in front)
 
 **Facts checked:**
 - **Field subrole:** the system-wide accessibility element's `kAXFocusedUIElementAttribute` → `kAXSubroleAttribute` reports `AXSecureTextField` for `NSSecureTextField`. WebKit, Chromium and Firefox map `<input type=password>` to the same subrole when they expose a tree.
@@ -43,14 +43,16 @@ This design uses those planned names. If the groundwork merges with different na
 ### 1. The password guard is a pure decision, evaluated at paste time
 
 ```swift
-enum PasteGuardDecision: Equatable { case allow, warn(ownerName: String?), block }
+enum PasteGuardDecision: Equatable { case allow, warn(ownerPID: pid_t?), block }
 
 static func decide(focusedSubrole: String?,       // nil when unreadable
-                   secureInputOwnerPID: pid_t?,   // nil when secure input is off
+                   secureInputOwnerPID: pid_t?,   // nil when off or unknown
                    secureInputOn: Bool,
                    frontmostPID: pid_t?,
                    frontmostCategory: AppCategory?) -> PasteGuardDecision
 ```
+
+The stage turns `ownerPID` into an app name (`NSRunningApplication`) for the notice; the decision itself stays pure.
 
 **Rules, in order:**
 1. `focusedSubrole == "AXSecureTextField"` → **block**.
@@ -60,9 +62,11 @@ static func decide(focusedSubrole: String?,       // nil when unreadable
 
 **What happens:**
 - **Block:** no ⌘V, no clipboard write and no History entry. The status reads "Not pasted: a password field is focused", shown like the existing "Saved to History" notice (orange, on the icon, the capsule and the General tab). No content goes to the log.
-- **Warn:** the paste goes ahead. The status shows "Pasted. Note: <App> has secure input on" for a few seconds, without the error colour.
+- **Warn:** the paste goes ahead, then the notice "Pasted. Note: <App> has secure input on" is shown through the groundwork notices channel. That channel shows notices the way errors are shown, until the next dictation; a separate non-error style would mean changing shared status code, so it is left for later.
 
-**The probe** (`SystemPasteGuardProbe`):
+**Where it runs:** `PasteGuardStage`, the first of `PerAppStages`' final stages. It reads the probe, decides, and on **block** sets `context.isSecureField = true`, so the groundwork's routing returns `.blocked(notice: "Not pasted: a password field is focused")`. On **warn** it appends the notice. `TargetAppResolver` is left untouched: the stage runs at the same moment (no `await` between the paste-target read, the final stages and routing), so the decision and the formatting use the same app.
+
+**The probe** (`SystemPasteGuardProbe`, behind the `PasteGuardProbe` protocol):
 - Reads the subrole through the accessibility API, with a short messaging timeout (`AXUIElementSetMessagingTimeout` ≈ 0.25 s) so a hung app can't stall the paste.
 - Reads the secure-input state and owner through `IsSecureEventInputEnabled()` and `CGSessionCopyCurrentDictionary()`.
 - Runs on the main actor right before ⌘V.
@@ -97,9 +101,12 @@ struct FormattingRules: Codable, Equatable {
   - a word with another capital letter (acronyms, CamelCase: "API", "iOS", "GitHub")
   - a custom-vocabulary term
 - **Words are never added, removed or reordered.** A unit test checks that the words in the output (case-insensitive, punctuation stripped) equal the words in the input.
-- **The rules are a final `TextStage`.** It runs after cleanup and filler removal, using the *paste-time* target app (decision Q14). Rewrite output passes through the same stage when Rewrite lands (Q28). The terminal one-line rule is just `lineBreaks: .join`.
+- **The rules are a final `TextStage`** (`FormattingStage`, after `PasteGuardStage` in `PerAppStages`). It runs after cleanup and filler removal, using `context.appAtPaste` (decision Q14). Rewrite's final stages run before it, so Rewrite output passes through the same rules (Q28). The terminal one-line rule is just `lineBreaks: .join`.
+- **Honyaku in front:** the text isn't headed for Honyaku, so no rules are applied; routing saves it as before.
+- **Vocabulary terms for the first-letter exception** come from `context.speechHints.glossary`, the terms the vocabulary feature hands to the pipeline. When custom-vocabulary lands, check that every enabled term reaches the stage (task 7.1).
+- **Speaker labels:** a transcript starting with `[Speaker N]` keeps its first letter, so labels are never altered.
 - **What History stores:** the text as pasted, after the rules, plus `appBundleID`.
-- **History-only apps:** the text is formatted the same way. The status reads "Saved to History. <App> is set not to paste".
+- **History-only apps:** the text is formatted the same way. The stage sets `context.pasteAllowed = false` and `pasteOffNotice = "Saved to History. <App> is set not to paste"`, which the groundwork routes to `.saveOnly(notice:)`. `<App>` is the override's display name, else the app's name, else its bundle ID.
 
 ### 3. Categories, defaults and precedence
 
@@ -126,24 +133,26 @@ struct FormattingRules: Codable, Equatable {
 
 ### 4. Routing order at paste time
 
-1. **First-run test or discard:** unchanged (the groundwork's `destination`).
-2. **Password guard:** block → drop.
+The groundwork's `destination(for:currentTest:)` already has this order; this change only fills in the flags:
+1. **First-run test or discard:** unchanged.
+2. **Password guard:** `isSecureField` (set by `PasteGuardStage`) → `.blocked`: no pasteboard write, no paste, no save.
 3. **Honyaku in front:** History only, as today.
-4. **Profile with `paste == false`:** History only, with the app-specific status.
-5. **Otherwise:** paste. A warn shows its notice.
+4. **Profile with `paste == false`:** `pasteAllowed == false` (set by `FormattingStage`) → History only, with the app-specific notice.
+5. **Otherwise:** paste. A warn shows its notice afterwards.
 
-The guard and the target app are read once, together, right before step 2, so the decision and the formatting use the same app.
+The target app is read once by the groundwork, right before the final stages, so the guard and the formatting use the same app.
 
 ### 5. Store
 
-- **`AppProfilesStore(directory: URL)`:**
+- **`AppProfilesStore`**, a `FeatureStore` created by `FeatureEnvironment.store(_:)` (one per environment, shared by `FormattingStage` and the Apps tab):
   - Reads and writes `app-profiles.json` in Honyaku's Application Support folder.
   - Atomic writes, mode 0600, excluded from backup, the same treatment as `history.json`.
   - Tests pass a temp directory and never touch the user's real files.
 - **What's stored:** only categories changed from their defaults, plus the overrides. This lets the built-in defaults improve later without a migration.
-  - Contents: `{ version: 1, categories: { "terminals": FormattingRules, … }, apps: [{ bundleID, displayName, rules }] }`.
+  - Contents: `{ version: 1, categories: { "terminal": FormattingRules, … }, apps: [{ bundleID, displayName, rules }] }`, keyed by `AppCategory` raw values. Missing rule fields decode to the as-spoken value, so later additions don't break older files.
 - **Unreadable or unknown version:** use the defaults, log (with no content), and don't overwrite the file until the user changes something.
-- **Live updates:** the store is `@Observable` and owned by `AppCoordinator`. The pipeline reads a snapshot at paste time, so changes apply to the next dictation without a relaunch.
+- **Live updates:** the store is `@Observable`. The stage reads its current profiles at paste time, so changes apply to the next dictation without a relaunch.
+- **Writes happen only when the user changes something**, never on load, so a damaged file is left alone until then.
 
 ### 6. Settings > Apps tab
 
@@ -163,7 +172,8 @@ The guard and the target app are read once, together, right before step 2, so th
 
 - Each History row shows a small app icon and name, resolved from `appBundleID` through `NSWorkspace.urlForApplication(withBundleIdentifier:)`. If the app is no longer installed, the row falls back to the bundle ID.
 - Entries with no app (older entries, first-run tests) show nothing extra.
-- History-only entries show "Not pasted".
+- History-only entries show "Not pasted". The pipeline records it as a new optional `TranscriptEntry.pasted` (true for a paste, false for History only; nil on older entries).
+- The label is its own view (`HistoryAppLabel`), added to the History row with one line, since Vocabulary and Rewrite also touch that row.
 
 ### 8. Testing
 

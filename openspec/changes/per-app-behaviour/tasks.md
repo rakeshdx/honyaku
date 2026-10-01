@@ -1,6 +1,6 @@
 ## 1. Prepare
 
-- [ ] 1.1 Rebase onto main after dictation-stages and custom-vocabulary merge; adopt the merged names (`DictationContext`, `AppCategory`, `TextStage`, injectable pipeline) and update design.md where they differ
+- [x] 1.1 Rebase onto main after dictation-stages merges (894858c); adopt the merged names (`PerAppStages`, `DictationContext.appAtPaste`/`isSecureField`/`pasteAllowed`/`pasteOffNotice`/`notices`, `.blocked(notice:)`, `FeatureEnvironment.store`) and update design.md where they differ
 - [x] 1.2 Confirm the Terminals secure-input exception (design 1a) with the user before implementing the guard (Q35: paste and save, no notice)
 
 ## 2. Rules and store
@@ -18,8 +18,8 @@
 
 ## 4. Pipeline
 
-- [ ] 4.1 Refresh the target app at paste time; apply the guard → Honyaku-in-front → History-only → paste routing order
-- [ ] 4.2 Formatting rules as a final `TextStage` using the paste-time app; History stores the formatted text and `appBundleID`
+- [ ] 4.1 `PerAppStages.make` returns `PasteGuardStage` then `FormattingStage` as final stages; the groundwork routing (guard → Honyaku in front → History only → paste) is driven by `isSecureField` and `pasteAllowed`
+- [ ] 4.2 Formatting rules as a final `TextStage` using `context.appAtPaste`; History stores the formatted text, `appBundleID` and the new optional `pasted` flag
 - [ ] 4.3 Status messages: "Not pasted: a password field is focused", "Saved to History. <App> is set not to paste", "Pasted. Note: <App> has secure input on" (no transcript in status or logs)
 - [ ] 4.4 Pipeline unit tests with a fake probe and fake paste: blocked text is not pasted or saved; routing order; paste-time app wins
 
@@ -35,4 +35,10 @@
 - [ ] 6.1 `xcodegen generate`; clean build with no warnings in project code (through the shared build lock)
 - [ ] 6.2 Unit tests and the HonyakuUITests scheme pass (through the shared build lock)
 - [ ] 6.3 `openspec validate per-app-behaviour --strict`
-- [ ] 6.4 Developer, by hand: Safari password field (blocked, not saved); Terminal with Secure Keyboard Entry (pasted and saved, no notice); Slack (pasted); terminal one-line and no full stop; does push-to-talk still fire while secure input is on?
+## 7. After custom-vocabulary merges
+
+- [ ] 7.1 Check that every enabled vocabulary term reaches the first-letter exception (today through `context.speechHints.glossary`); pass the full list if the vocabulary only fills the glossary for Whisper
+
+## 8. Manual checks
+
+- [ ] 8.1 Developer, by hand: Safari password field (blocked, not saved); Terminal with Secure Keyboard Entry (pasted and saved, no notice); Slack (pasted); terminal one-line and no full stop; does push-to-talk still fire while secure input is on?

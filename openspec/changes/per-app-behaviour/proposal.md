@@ -55,10 +55,8 @@ Honyaku pastes the same text wherever the cursor is. That's wrong in two ways:
 ## Impact
 
 - **Code:**
-  - New `AppProfiles` (model, store, rule engine)
-  - `PasteGuard` (decision + system probe)
-  - A final pipeline stage and routing in `TranscriptionPipeline`, using the groundwork `DictationContext.targetApp` at paste time
-  - `Views/AppsSettings.swift`, plus a new Settings tab case
-  - The History row label
+  - New `Sources/Honyaku/PerApp/`: `FormattingRules` (model and rule engine), `AppProfiles` and `AppProfilesStore`, `PasteGuard` (decision, system probe), `FormattingStage` and `PasteGuardStage`, `AppsSettings` (the tab) and `HistoryAppLabel`
+  - `Pipeline/Stages/PerAppStages.swift` returns the two final stages
+  - Small edits to shared files: the Settings `Tab` enum (Apps), the History row (one line), `TranscriptEntry.pasted`, and the History entry in `TranscriptionPipeline.run()`
 - **Data:** a new `~/Library/Application Support/Honyaku/app-profiles.json` (mode 0600, excluded from backup). `TranscriptEntry.appBundleID` is filled in; it was added as optional by the groundwork.
-- **Depends on:** `dictation-stages` (`DictationContext`, `AppCategory`, `TextStage` final stages, the injectable pipeline) and `custom-vocabulary`, whose terms are protected from lowercasing. This branch rebases onto main after both merge. Type names here follow the groundwork plan; final names follow whatever the groundwork merges.
+- **Depends on:** `dictation-stages` (`DictationContext`, `AppCategory`, `TextStage` final stages, the injectable pipeline) and `custom-vocabulary`, whose terms are protected from lowercasing. This branch is rebased onto main with the groundwork merged (PR #7) and uses its merged names. Custom vocabulary hasn't merged yet; its terms reach the first-letter exception through the context's glossary (task 7.1 checks this after it merges).
