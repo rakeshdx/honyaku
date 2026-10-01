@@ -75,3 +75,38 @@ While a rewrite is being generated, the menu bar icon SHALL tell VoiceOver "Rewr
 #### Scenario: VoiceOver reads the icon during a rewrite
 - **WHEN** VoiceOver focuses the Honyaku icon while a rewrite is generating
 - **THEN** it reads "Honyaku" followed by "Rewriting"
+
+## MODIFIED Requirements
+
+### Requirement: Clicking the menu bar icon opens Settings
+Clicking the Honyaku menu bar icon SHALL open the Settings window directly. There is no popover and no transcript list in the menu bar; history lives in Settings > History.
+- **While first run is incomplete** (a permission is missing, or models haven't been set up), clicking the icon SHALL open the first-run window instead.
+- **Right-clicking** the icon SHALL show a menu with "Settings…", a "Rewrite as" submenu and "Quit Honyaku" (see "The right-click menu chooses the rewrite template"). A Control-click SHALL NOT open the menu, because holding Control is how the user dictates.
+- **The icon itself** SHALL keep reflecting state: idle, recording, transcribing or processing, and error.
+- **Current status** SHALL be shown at the top of the General tab: the Control keycap with "Hold Control to talk", the active speech model, whether cleanup is on, the full text of any error, and any background model download with its progress.
+- **Clicking the icon SHALL NOT clear an error.** The error stays until the next dictation starts, or until the problem it reports is fixed (for example, the Control listener installs after Accessibility is granted).
+
+#### Scenario: User clicks the menu bar icon after setup
+- **WHEN** the user clicks the Honyaku icon in the menu bar
+- **THEN** the Settings window opens (or comes to the front) on the last tab used, and no popover appears
+
+#### Scenario: User right-clicks the icon
+- **WHEN** the user right-clicks the Honyaku icon
+- **THEN** a menu with "Settings…", "Rewrite as" and "Quit Honyaku" appears, and "Quit Honyaku" quits the app
+
+#### Scenario: User Control-clicks the icon
+- **WHEN** the user holds Control and clicks the Honyaku icon
+- **THEN** the click is treated as a left click (Settings, or first run, opens), and no menu appears
+
+#### Scenario: First run isn't finished
+- **GIVEN** Accessibility isn't granted yet, or models haven't been set up
+- **WHEN** the user clicks the icon
+- **THEN** the first-run window opens at its first incomplete step
+
+#### Scenario: An error occurred
+- **WHEN** the last dictation failed and the user clicks the icon
+- **THEN** the General tab shows the error's full text, and the error is still there after the click; the next dictation clears it
+
+#### Scenario: A model is downloading in the background
+- **WHEN** a migrated model is downloading and the user opens Settings
+- **THEN** the General tab and the model's row in the Models tab show the download's progress
