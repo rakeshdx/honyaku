@@ -39,6 +39,14 @@ final class ModelDownloads: ModelAvailability {
 
     func isInstalled(_ model: ModelInfo) -> Bool { ModelInstaller.isInstalled(model) }
 
+    /// A cleanup model installed before Honyaku fetched chat templates has its weights but no template:
+    /// fetch just the template, visibly, like a migration download.
+    func repairChatTemplateIfNeeded(_ model: ModelInfo) {
+        guard model.engine == .mlx,
+              ModelInstaller.needsChatTemplateOnly(at: ModelStore.shared.modelDirectory(for: model)) else { return }
+        startDownload(model)
+    }
+
     /// "Downloading Parakeet TDT 0.6B v2, 42%"
     func downloadMessage(for model: ModelInfo) -> String {
         let percent = Int(((appState.modelDownloads[model.id] ?? 0) * 100).rounded())

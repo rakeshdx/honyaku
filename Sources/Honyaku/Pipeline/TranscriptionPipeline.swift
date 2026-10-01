@@ -99,6 +99,10 @@ final class TranscriptionPipeline {
         for (key, id) in migrated where appState.migratedSelectionKeys.contains(key) {
             if let model = ModelRegistry.model(id: id) { models.startDownload(model) }
         }
+        // An older install may lack the cleanup model's chat template; fetch just that file
+        if let cleanupModel = ModelRegistry.model(id: appState.selectedCleanupModelID) {
+            models.repairChatTemplateIfNeeded(cleanupModel)
+        }
         let transcription = transcription
         let cleanup = cleanup
         Task {

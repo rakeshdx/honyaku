@@ -37,7 +37,13 @@ actor ModelDownloader: ModelDownloading {
     }
 
     func download(model: ModelInfo, progress: @escaping @Sendable (Double) -> Void) async throws {
-        let targetDir = store.modelDirectory(for: model)
+        try await download(model: model, to: store.modelDirectory(for: model), progress: progress)
+    }
+
+    /// Downloads `model`'s files into `targetDir`, skipping any already there. Each file is moved into
+    /// place only once it's complete, so a file on disk is a finished download: a repair or a resumed
+    /// download fetches just what's missing. Tests pass a temporary folder.
+    func download(model: ModelInfo, to targetDir: URL, progress: @escaping @Sendable (Double) -> Void) async throws {
         try FileManager.default.createDirectory(at: targetDir, withIntermediateDirectories: true)
 
         // Mark directory as excluded from backup
@@ -46,8 +52,8 @@ actor ModelDownloader: ModelDownloading {
         var mutableURL = targetDir
         try? mutableURL.setResourceValues(rv)
 
-        // Disk space pre-check
-        let neededBytes = Int64(model.sizeMB) * 1_000_000
+        // Disk space pre-check, for what's left to fetch
+        let neededBytes = max(0, Int64(model.sizeMB) * 1_000_000 - ModelInstaller.sizeOnDisk(targetDir))
         if let available = try? targetDir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
             .volumeAvailableCapacityForImportantUsage {
             if available < neededBytes {
@@ -58,12 +64,13 @@ actor ModelDownloader: ModelDownloading {
         let hfToken = KeychainService.load(key: KeychainService.hfTokenKey)
 
         // MLX models: fileNames is empty — fetch the repo file listing from the HF API first
-        let fileNames: [String]
+        let listed: [String]
         if model.fileNames.isEmpty {
-            fileNames = try await fetchMLXRepoFiles(repoPath: model.hfRepoPath, token: hfToken)
+            listed = try await fetchMLXRepoFiles(repoPath: model.hfRepoPath, token: hfToken)
         } else {
-            fileNames = model.fileNames
+            listed = model.fileNames
         }
+        let fileNames = Self.missingFiles(listed, in: targetDir)
 
         let baseURLString = "https://huggingface.co/\(model.hfRepoPath)/resolve/main"
 
@@ -114,10 +121,25 @@ actor ModelDownloader: ModelDownloading {
             throw ModelDownloadError.downloadFailed(URLError(.badServerResponse))
         }
 
-        let allowed: Set<String> = ["safetensors", "json", "txt", "model", "tiktoken"]
-        return siblings.compactMap { $0["rfilename"] as? String }.filter { name in
-            guard let ext = name.split(separator: ".").last.map(String.init) else { return false }
+        return Self.mlxFiles(in: siblings.compactMap { $0["rfilename"] as? String })
+    }
+
+    /// The files an MLX model needs from its repo listing: weights, configs, tokenizer files and the chat
+    /// template, which some repos keep in `chat_template.jinja` rather than in `tokenizer_config.json`.
+    nonisolated static func mlxFiles(in repoFiles: [String]) -> [String] {
+        let allowed: Set<String> = ["safetensors", "json", "txt", "model", "tiktoken", "jinja"]
+        return repoFiles.filter { name in
+            guard name.contains("."), let ext = name.split(separator: ".").last.map(String.init) else { return false }
             return allowed.contains(ext)
+        }
+    }
+
+    /// `fileNames` minus those already in `folder` (present and not empty).
+    nonisolated static func missingFiles(_ fileNames: [String], in folder: URL) -> [String] {
+        fileNames.filter { name in
+            let url = folder.appendingPathComponent(name)
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            return size == 0
         }
     }
 

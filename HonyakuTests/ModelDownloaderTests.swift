@@ -67,6 +67,48 @@ final class ModelDownloaderTests: XCTestCase {
         }
     }
 
+    // MARK: - Chat templates and missing files
+
+    func testMLXFileListIncludesTheChatTemplate() {
+        // The file list of mlx-community/Qwen3-4B-Instruct-2507-4bit
+        let repo = [".gitattributes", "README.md", "added_tokens.json", "chat_template.jinja", "config.json",
+                    "generation_config.json", "merges.txt", "model.safetensors", "model.safetensors.index.json",
+                    "special_tokens_map.json", "tokenizer.json", "tokenizer_config.json", "vocab.json"]
+        let files = ModelDownloader.mlxFiles(in: repo)
+        XCTAssertTrue(files.contains("chat_template.jinja"))
+        XCTAssertFalse(files.contains("README.md"))
+        XCTAssertFalse(files.contains(".gitattributes"))
+        XCTAssertEqual(files.count, 11)
+    }
+
+    func testOnlyMissingFilesAreFetched() throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "honyaku-downloader-test-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("weights".utf8).write(to: folder.appending(path: "model.safetensors"))
+        try Data().write(to: folder.appending(path: "config.json"))  // empty: an unfinished file
+        let missing = ModelDownloader.missingFiles(["model.safetensors", "config.json", "chat_template.jinja"], in: folder)
+        XCTAssertEqual(missing, ["config.json", "chat_template.jinja"])
+    }
+
+    func testRepairDownloadsOnlyTheMissingFile() async throws {
+        let folder = FileManager.default.temporaryDirectory.appending(path: "honyaku-downloader-test-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let weights = Data("existing weights".utf8)
+        try weights.write(to: folder.appending(path: "model.safetensors"))
+
+        let downloader = ModelDownloader(session: makeMockSession(data: Data("{{ template }}".utf8), statusCode: 200))
+        let model = ModelInfo(id: "repair-test", type: .cleanup, engine: .mlx, displayName: "Test", hfRepoPath: "test/repo",
+                              fileNames: ["model.safetensors", "chat_template.jinja"], sizeMB: 1, tier: "test",
+                              notes: "", sha256Checksums: [:])
+        try await downloader.download(model: model, to: folder) { _ in }
+
+        XCTAssertEqual(try Data(contentsOf: folder.appending(path: "model.safetensors")), weights,
+                       "A file already on disk must not be downloaded again")
+        XCTAssertEqual(try String(contentsOf: folder.appending(path: "chat_template.jinja"), encoding: .utf8), "{{ template }}")
+    }
+
     // MARK: - Helpers
 
     private func makeMockSession(data: Data? = nil, statusCode: Int = 200, error: Error? = nil) -> URLSession {

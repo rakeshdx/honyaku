@@ -205,6 +205,17 @@ actor CleanupService: CleanupServiceProtocol {
         min(512, 2 * (rawText.count / 3 + 1) + 32)
     }
 
+    /// The prompt text a model in `directory` receives for one turn, built with its chat template the way
+    /// cleanup builds it. Loads only the tokenizer, not the weights. Throws when the folder has no template,
+    /// where mlx-swift-lm would otherwise fall back to plain text. Lets integration tests check the format.
+    static func chatPromptText(modelDirectory directory: URL, system: String, user: String) async throws -> String {
+        let tokenizer = try await loadTokenizer(configuration: ModelConfiguration(directory: directory),
+                                                hub: defaultHubApi)
+        let tokens = try tokenizer.applyChatTemplate(messages: [["role": "system", "content": system],
+                                                                ["role": "user", "content": user]])
+        return tokenizer.decode(tokens: tokens)
+    }
+
     /// Loads the selected model ahead of the first dictation (launch warm-up).
     func prepare() async throws {
         _ = try await loadModel()

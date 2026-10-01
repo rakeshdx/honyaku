@@ -74,6 +74,12 @@ protocol ModelAvailability {
     func startDownload(_ model: ModelInfo)
     /// "Downloading …, 42%. Dictation works once it finishes."
     func downloadMessage(for model: ModelInfo) -> String
+    /// Fetches a cleanup model's missing chat template in the background, when that's all it's missing.
+    func repairChatTemplateIfNeeded(_ model: ModelInfo)
+}
+
+extension ModelAvailability {
+    func repairChatTemplateIfNeeded(_ model: ModelInfo) {}
 }
 
 // MARK: - Single instance
