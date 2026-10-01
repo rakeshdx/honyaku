@@ -53,6 +53,32 @@ final class PasteGuardTests: XCTestCase {
                                          frontmostPID: nil, frontmostCategory: nil), .warn(ownerPID: other))
     }
 
+    func testFocusedDialogFromAnotherProcessOwningSecureInputIsBlocked() {
+        // Safari is in front, but a password dialog from another process has keyboard focus
+        XCTAssertEqual(PasteGuard.decide(focusedSubrole: nil, secureInputOwnerPID: other, secureInputOn: true,
+                                         frontmostPID: front, frontmostCategory: .browser,
+                                         focusedPID: other, focusedCategory: .other), .block)
+    }
+
+    func testFocusedTerminalOwningSecureInputIsAllowed() {
+        XCTAssertEqual(PasteGuard.decide(focusedSubrole: nil, secureInputOwnerPID: other, secureInputOn: true,
+                                         frontmostPID: front, frontmostCategory: .other,
+                                         focusedPID: other, focusedCategory: .terminal), .allow)
+    }
+
+    func testFocusedElementInTheFrontAppStillWarnsForAnotherOwner() {
+        XCTAssertEqual(PasteGuard.decide(focusedSubrole: "AXTextArea", secureInputOwnerPID: other, secureInputOn: true,
+                                         frontmostPID: front, frontmostCategory: .other,
+                                         focusedPID: front, focusedCategory: .other), .warn(ownerPID: other))
+    }
+
+    func testReadingCarriesTheFocusedProcess() {
+        let reading = PasteGuardReading(focusedSubrole: nil, secureInputOn: true, secureInputOwnerPID: other,
+                                        focusedPID: other, focusedCategory: .chat)
+        XCTAssertEqual(PasteGuard.decide(reading, frontmost: TargetApp(bundleID: "com.apple.Safari", pid: front, name: "Safari")),
+                       .block)
+    }
+
     func testWarningNotice() {
         XCTAssertEqual(PasteGuard.warningNotice(ownerName: "1Password"), "Pasted. Note: 1Password has secure input on")
         XCTAssertEqual(PasteGuard.warningNotice(ownerName: nil), "Pasted. Note: another app has secure input on")

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Right before routing: blocks the paste when a password field has focus (the groundwork routes
-/// `isSecureField` to `.blocked`), or adds a warning when another app has secure input on.
+/// Right before routing, after the app's rules: blocks the paste when a password field has focus (the
+/// groundwork routes `isSecureField` to `.blocked`), or warns when another app has secure input on.
 @MainActor
 struct PasteGuardStage: TextStage {
     let probe: any PasteGuardProbe
@@ -13,6 +13,9 @@ struct PasteGuardStage: TextStage {
         case .block:
             context.isSecureField = true
         case .warn(let ownerPID):
+            // Only when the text will really be pasted: blocked, History-only and Honyaku-in-front runs
+            // never say "Pasted"
+            guard context.pasteAllowed, !context.honyakuIsFrontmost else { break }
             context.notices.append(PasteGuard.warningNotice(ownerName: ownerPID.flatMap(probe.appName(pid:))))
         }
         return text

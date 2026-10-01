@@ -3,18 +3,18 @@
 ### Requirement: Honyaku never pastes into a password field
 Right before every paste, the system SHALL check the focused text field and the system secure-input state, and SHALL:
 - **block** the paste when the focused element's subrole is `AXSecureTextField`;
-- **block** the paste when secure input is on and owned by the app that would receive the text, unless that app is in the Terminals category;
+- **block** the paste when secure input is on and owned by the app that would receive the text (the app in front, or the app whose element has keyboard focus, such as a dialog from another process), unless that app is in the Terminals category;
 - **paste with no notice** when secure input is on and owned by a terminal that is in front (for example with Secure Keyboard Entry on);
 - **warn and paste** when secure input is on but owned by another app or by an unknown app;
 - **paste** when the field's type can't be read (fail open).
 
 A blocked transcript SHALL NOT be written to the pasteboard, pasted or saved to history. The status SHALL read "Not pasted: a password field is focused". The status SHALL NOT include the transcript, and the transcript SHALL NOT be logged.
 
-A warning SHALL show "Pasted. Note: <App> has secure input on" once the text is pasted, the same way other dictation notices are shown, until the next dictation starts.
+A warning SHALL show "Pasted. Note: <App> has secure input on" only when the text is actually pasted, the same way other dictation notices are shown, until the next dictation starts. A run that ends blocked, saved to History only, or with Honyaku in front SHALL NOT show it.
 
 The check SHALL run before the "Honyaku was in front" routing, so text dictated into Honyaku's own token field is blocked rather than saved.
 
-The system SHALL NOT set `AXManualAccessibility` or any other attribute on other apps to read their fields. The check SHALL time out quickly (about 0.25 s) rather than delay the paste when an app doesn't respond.
+The system SHALL NOT set `AXManualAccessibility` or any other attribute on other apps to read their fields. The whole check SHALL take at most about 0.25 s, rather than delay the paste, when an app doesn't respond. The secure-input owner SHALL only be looked up while secure input is on.
 
 #### Scenario: A browser password field is focused
 - **GIVEN** a password field on a web page in Safari or Chrome has focus
@@ -30,6 +30,16 @@ The system SHALL NOT set `AXManualAccessibility` or any other attribute on other
 - **GIVEN** a password manager left secure input on while the user dictates into TextEdit
 - **WHEN** a dictation finishes
 - **THEN** the text is pasted into TextEdit and the status briefly reads "Pasted. Note: <password manager> has secure input on"
+
+#### Scenario: A dialog from another app has focus and owns secure input
+- **GIVEN** Safari is in front, but a password dialog from another process has keyboard focus and turned on secure input
+- **WHEN** a dictation finishes
+- **THEN** the paste is blocked and nothing is saved
+
+#### Scenario: No warning when the text isn't pasted
+- **GIVEN** a password manager left secure input on, and the app in front is set to History only
+- **WHEN** a dictation finishes
+- **THEN** the text is saved to History with "Saved to History. <App> is set not to paste", and no secure-input warning is shown
 
 #### Scenario: Terminal with Secure Keyboard Entry
 - **GIVEN** Terminal is in front with Secure Keyboard Entry turned on

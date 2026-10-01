@@ -35,16 +35,16 @@ Right before pasting, the system SHALL identify the app that will receive the te
 
 ### Requirement: Pasted text follows the receiving app's formatting rules
 The system SHALL apply the formatting rules of the app that receives the text, as identified at paste time, to every transcript before it is pasted or saved as History only. That includes word-for-word dictation and Rewrite output. The rules SHALL be:
-- final full stop: keep, or drop a single trailing "."
+- final full stop: keep, or drop a single trailing "." that ends a word. A standalone "." (as in `git add .`), an ellipsis, a dotted abbreviation ("e.g.", "U.S.") and a common abbreviation ("etc.", "vs.") SHALL keep theirs
 - first letter: as spoken, or lowercase
 - quotes: as spoken, or straight
-- line breaks: keep, or join into one line with no trailing line break
+- line breaks: keep, or join into one line with no trailing line break. Joining SHALL treat every line separator (CR, LF, CRLF, U+2028, U+2029, U+0085, vertical tab, form feed) as a line break and SHALL remove other control characters except tab
 - trailing space: off or on
 - paste: on, or off for History only
 
 The rules SHALL only change punctuation, letter case, quote characters and whitespace. They SHALL NOT add, remove or reorder words.
 
-When the first letter is lowercased, the first word SHALL be left alone if it is "I" or a contraction of it, contains another capital letter (an acronym or CamelCase), or is a custom-vocabulary term.
+When the first letter is lowercased, the first word SHALL be left alone if it is "I" or a contraction of it, starts with a digit ("3D"), contains another capital letter (an acronym or CamelCase), or is a custom-vocabulary term.
 
 Each app SHALL use its own rules if the user gave it an override, otherwise its category's rules, otherwise the Everything else rules. The categories SHALL be Terminals, Code editors, Chat, Email, Browsers and Everything else. Their defaults SHALL be:
 - **Terminals:** drop the final full stop, straight quotes, join line breaks.
@@ -57,10 +57,25 @@ Each app SHALL use its own rules if the user gave it an override, otherwise its 
 - **WHEN** the transcript is "Run “make test” in the api folder."
 - **THEN** the pasted text is `Run "make test" in the api folder`, with no final full stop and straight quotes
 
+#### Scenario: A command ending in a standalone full stop
+- **GIVEN** Terminal is in front with default rules
+- **WHEN** the transcript is "git add ."
+- **THEN** the pasted text is "git add .", with its "." kept
+
+#### Scenario: Abbreviations keep their full stop
+- **GIVEN** the receiving app's rules drop the final full stop
+- **WHEN** the transcripts end in "e.g.", "U.S.", "etc." or "..."
+- **THEN** the final full stop is kept in each, and "Ship it." still becomes "Ship it"
+
 #### Scenario: Multi-line text into a terminal
 - **GIVEN** iTerm2 is in front with default rules
 - **WHEN** the text to paste spans three lines and ends with a line break
 - **THEN** it is pasted as one line, with each line break replaced by a single space and no line break at the end
+
+#### Scenario: Unusual line separators and control characters into a terminal
+- **GIVEN** Terminal is in front with default rules
+- **WHEN** the text contains a U+2028 line separator, a vertical tab and an escape character
+- **THEN** it is pasted as one line, the separators become single spaces and the escape character is removed
 
 #### Scenario: Dictating into a code editor
 - **GIVEN** Visual Studio Code is in front with default rules
@@ -86,6 +101,11 @@ Each app SHALL use its own rules if the user gave it an override, otherwise its 
 - **GIVEN** the receiving app's rules lowercase the first letter
 - **WHEN** the transcripts are "I think so", "API keys rotate tonight" and "Deploy it"
 - **THEN** the pasted texts are "I think so", "API keys rotate tonight" and "deploy it"
+
+#### Scenario: Lowercasing the first letter keeps a leading number
+- **GIVEN** the receiving app's rules lowercase the first letter
+- **WHEN** the transcript is "3D printing starts today"
+- **THEN** the pasted text is "3D printing starts today"
 
 #### Scenario: Rules never change the words
 - **WHEN** any combination of rules is applied to any transcript

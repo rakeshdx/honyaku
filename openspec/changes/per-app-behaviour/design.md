@@ -49,26 +49,32 @@ static func decide(focusedSubrole: String?,       // nil when unreadable
                    secureInputOwnerPID: pid_t?,   // nil when off or unknown
                    secureInputOn: Bool,
                    frontmostPID: pid_t?,
-                   frontmostCategory: AppCategory?) -> PasteGuardDecision
+                   frontmostCategory: AppCategory?,
+                   focusedPID: pid_t?,            // the process of the element with keyboard focus
+                   focusedCategory: AppCategory?) -> PasteGuardDecision
 ```
 
 The stage turns `ownerPID` into an app name (`NSRunningApplication`) for the notice; the decision itself stays pure.
 
 **Rules, in order:**
 1. `focusedSubrole == "AXSecureTextField"` → **block**.
-2. Secure input is on and owned by the front app (`owner == frontmostPID`) → **block**. Exception: when the front app is a terminal → **allow**, with no notice (see 1a).
+2. Secure input is on and owned by the front app (`owner == frontmostPID`), or by the app whose element has keyboard focus (`owner == focusedPID`, e.g. a password dialog from another process while Safari is in front) → **block**. Exception: when that app is a terminal → **allow**, with no notice (see 1a). ⌘V goes to the focused element, so its process counts as much as the front app.
 3. Secure input is on but owned by another app, or the owner is unknown → **warn**. The paste goes ahead.
 4. Otherwise → **allow**. This includes an unreadable subrole: fail open.
 
 **What happens:**
 - **Block:** no ⌘V, no clipboard write and no History entry. The status reads "Not pasted: a password field is focused", shown like the existing "Saved to History" notice (orange, on the icon, the capsule and the General tab). No content goes to the log.
-- **Warn:** the paste goes ahead, then the notice "Pasted. Note: <App> has secure input on" is shown through the groundwork notices channel. That channel shows notices the way errors are shown, until the next dictation; a separate non-error style would mean changing shared status code, so it is left for later.
+- **Warn:** the paste goes ahead, then the notice "Pasted. Note: <App> has secure input on" is shown through the groundwork notices channel. It is added only when the text will really be pasted (`pasteAllowed` and not `honyakuIsFrontmost`), so blocked, History-only and Honyaku-in-front runs never claim "Pasted". That channel shows notices the way errors are shown, until the next dictation; a separate non-error style would mean changing shared status code, so it is left for later.
 
-**Where it runs:** `PasteGuardStage`, the first of `PerAppStages`' final stages. It reads the probe, decides, and on **block** sets `context.isSecureField = true`, so the groundwork's routing returns `.blocked(notice: "Not pasted: a password field is focused")`. On **warn** it appends the notice. `TargetAppResolver` is left untouched: the stage runs at the same moment (no `await` between the paste-target read, the final stages and routing), so the decision and the formatting use the same app.
+**Where it runs:** `PasteGuardStage`, the last of `PerAppStages`' final stages, after `FormattingStage` (review fix: the guard has to know whether the app's rules turned the paste off before it can decide to warn; blocking doesn't depend on the order). It reads the probe, decides, and on **block** sets `context.isSecureField = true`, so the groundwork's routing returns `.blocked(notice: "Not pasted: a password field is focused")`. On **warn** it appends the notice. `TargetAppResolver` is left untouched: the stage runs at the same moment (no `await` between the paste-target read, the final stages and routing), so the decision and the formatting use the same app.
 
 **The probe** (`SystemPasteGuardProbe`, behind the `PasteGuardProbe` protocol):
-- Reads the subrole through the accessibility API, with a short messaging timeout (`AXUIElementSetMessagingTimeout` ≈ 0.25 s) so a hung app can't stall the paste.
-- Reads the secure-input state and owner through `IsSecureEventInputEnabled()` and `CGSessionCopyCurrentDictionary()`.
+- **One budget of 0.25 s for all accessibility calls**, so a hung app can't stall the paste or the main thread for longer (worst case ≈ 0.25 s plus microseconds of local work):
+  1. The system-wide element's focused element, so the guard sees the element ⌘V will reach, even a dialog from another process. On the system-wide element a messaging timeout is process-wide, so it is set to the budget just for this call and reset to the default (0) right after; nothing else in Honyaku is affected. The reviewers asked for an element-only timeout; reading the focused element of the front app instead would miss dialogs from other processes, so this scoped form is used and recorded here.
+  2. `AXUIElementGetPid` on that element (local, no messaging).
+  3. Its subrole, with the element's own timeout set to whatever is left of the budget. If the first call timed out or less than 20 ms is left, the subrole reads as unknown (fail open).
+- Reads the secure-input owner only when `IsSecureEventInputEnabled()` is true: `CGSessionCopyCurrentDictionary()` first, then `IOConsoleUsers` in the IORegistry. No registry walk on an ordinary paste.
+- The focused element's app category comes from its PID's bundle ID.
 - Runs on the main actor right before ⌘V.
 - Is injected, so tests use a fake.
 
@@ -96,14 +102,17 @@ struct FormattingRules: Codable, Equatable {
 ```
 
 - **Order of application:** quotes → line breaks → final full stop → first letter → trailing space.
+- **Dropping the final full stop** only removes a "." that ends a word: it must follow a letter, digit, ")" or a closing quote. So a standalone "." stays (`git add .`, `docker build .`), and an ellipsis stays. Abbreviations keep theirs: dotted ones ("e.g.", "i.e.", "U.S.", "a.m.", letter-dot sequences) and a short list of common ones ("etc.", "vs.", "cf.", "et al.", "approx.", "misc.", "Inc.", "Ltd.", "Corp.", "Co.", "Jr.", "Sr.", "Mr.", "Mrs.", "Ms.", "Dr.", "Prof.", "St."). A URL, file name or number that ends a sentence ("example.com.", "notes.txt.", "3.5.") still loses the sentence's full stop, as before.
+- **Joining line breaks** treats every line separator as a line break (`\R`: CR, LF, CRLF, U+2028, U+2029, U+0085, VT, FF) and removes C0 control characters other than tab, and DEL, so nothing like an escape sequence reaches a terminal.
 - **Lowercasing the first letter** leaves the first word alone when it is:
   - "I" or a contraction of it ("I'm", "I'll", "I'd", "I've")
+  - a word starting with a digit ("3D", "4K")
   - a word with another capital letter (acronyms, CamelCase: "API", "iOS", "GitHub")
   - a custom-vocabulary term
 - **Words are never added, removed or reordered.** A unit test checks that the words in the output (case-insensitive, punctuation stripped) equal the words in the input.
-- **The rules are a final `TextStage`** (`FormattingStage`, after `PasteGuardStage` in `PerAppStages`). It runs after cleanup and filler removal, using `context.appAtPaste` (decision Q14). Rewrite's final stages run before it, so Rewrite output passes through the same rules (Q28). The terminal one-line rule is just `lineBreaks: .join`.
+- **The rules are a final `TextStage`** (`FormattingStage`, before `PasteGuardStage` in `PerAppStages`). It runs after cleanup and filler removal, using `context.appAtPaste` (decision Q14). Rewrite's final stages run before it, so Rewrite output passes through the same rules (Q28). The terminal one-line rule is just `lineBreaks: .join`.
 - **Honyaku in front:** the text isn't headed for Honyaku, so no rules are applied; routing saves it as before.
-- **Vocabulary terms for the first-letter exception** come from `context.speechHints.glossary`, the terms the vocabulary feature hands to the pipeline. When custom-vocabulary lands, check that every enabled term reaches the stage (task 7.1).
+- **Vocabulary terms for the first-letter exception** come from `context.speechHints.glossary` for now. The review found that the vocabulary feature fills it only for Whisper in English or Auto, so with Parakeet or another language terms would be lowercased. The custom-vocabulary branch adds `context.vocabularyTerms` (every enabled term, any engine); after it merges and this branch rebases, `FormattingStage` switches to it, with a pipeline test using the real `VocabularyPreparer` (task 7.1).
 - **Speaker labels:** a transcript starting with `[Speaker N]` keeps its first letter, so labels are never altered.
 - **What History stores:** the text as pasted, after the rules, plus `appBundleID`.
 - **History-only apps:** the text is formatted the same way. The stage sets `context.pasteAllowed = false` and `pasteOffNotice = "Saved to History. <App> is set not to paste"`, which the groundwork routes to `.saveOnly(notice:)`. `<App>` is the override's display name, else the app's name, else its bundle ID.
@@ -135,7 +144,7 @@ struct FormattingRules: Codable, Equatable {
 
 The groundwork's `destination(for:currentTest:)` already has this order; this change only fills in the flags:
 1. **First-run test or discard:** unchanged.
-2. **Password guard:** `isSecureField` (set by `PasteGuardStage`) → `.blocked`: no pasteboard write, no paste, no save.
+2. **Password guard:** `isSecureField` (set by `PasteGuardStage`, which runs after `FormattingStage`) → `.blocked`: no pasteboard write, no paste, no save.
 3. **Honyaku in front:** History only, as today.
 4. **Profile with `paste == false`:** `pasteAllowed == false` (set by `FormattingStage`) → History only, with the app-specific notice.
 5. **Otherwise:** paste. A warn shows its notice afterwards.
@@ -150,9 +159,10 @@ The target app is read once by the groundwork, right before the final stages, so
   - Tests pass a temp directory and never touch the user's real files.
 - **What's stored:** only categories changed from their defaults, plus the overrides. This lets the built-in defaults improve later without a migration.
   - Contents: `{ version: 1, categories: { "terminal": FormattingRules, … }, apps: [{ bundleID, displayName, rules }] }`, keyed by `AppCategory` raw values. Missing rule fields decode to the as-spoken value, so later additions don't break older files.
-- **Unreadable or unknown version:** use the defaults, log (with no content), and don't overwrite the file until the user changes something.
+- **Unreadable file:** use the defaults, move the file aside as `app-profiles.damaged-<date>.json` (like Vocabulary's `vocabulary.corrupt-<date>.json`), and show a notice in the Apps tab ("Your app rules couldn't be read. They were saved as … and Honyaku is using the default rules."), with Dismiss. Logged with no content.
+- **If moving it aside fails, or the file is from a newer version:** leave it where it is, show a notice saying changes won't be saved, and never save over it. Rule changes still apply in memory until Honyaku quits.
 - **Live updates:** the store is `@Observable`. The stage reads its current profiles at paste time, so changes apply to the next dictation without a relaunch.
-- **Writes happen only when the user changes something**, never on load, so a damaged file is left alone until then.
+- **Writes happen only when the user changes something**, never on load.
 
 ### 6. Settings > Apps tab
 
@@ -195,6 +205,6 @@ The target app is read once by the groundwork, right before the final stages, so
 ## Risks / Trade-offs
 
 - **Electron and some web fields fail open:** a password field in Slack or VS Code may not be detected. Browsers turn secure input on for their own password fields, which rule 2 catches.
-- **The accessibility call could hang** on an unresponsive app. Mitigated by the 0.25 s messaging timeout.
+- **The accessibility calls could hang** on an unresponsive app. Mitigated by one 0.25 s budget across the calls: the main thread waits at most about 0.25 s per paste.
 - **Lowercasing the first letter can be wrong** for proper nouns not in the vocabulary. It's off by default in every category.
 - **A full stop before a closing quote** (`said "done."`) is left alone, because the rule only drops a full stop that is the last character.

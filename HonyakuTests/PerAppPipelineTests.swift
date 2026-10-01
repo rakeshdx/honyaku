@@ -116,6 +116,36 @@ final class PerAppPipelineTests: XCTestCase {
         XCTAssertEqual(appState.status, .error("Pasted. Note: 1Password has secure input on"))
     }
 
+    func testNoWarningWhenTheTextIsSavedInsteadOfPasted() async {
+        var chat = profiles.profiles.rules(for: .chat)
+        chat.paste = false
+        profiles.profiles.setRules(chat, for: .chat)
+        probe.reading = PasteGuardReading(focusedSubrole: "AXTextArea", secureInputOn: true, secureInputOwnerPID: 555)
+        probe.names = [555: "1Password"]
+        await dictate("Hello.")
+
+        XCTAssertEqual(paste.pasted, [])
+        XCTAssertEqual(history.entries.count, 1)
+        XCTAssertEqual(appState.status, .error("Saved to History. Slack is set not to paste"), "no \"Pasted\" warning")
+    }
+
+    func testNoWarningWhenHonyakuIsInFront() async {
+        targets.front = TargetApp(bundleID: "com.honyaku.app", pid: 1, name: "Honyaku")
+        targets.honyakuIsFrontmost = true
+        probe.reading = PasteGuardReading(focusedSubrole: "AXTextField", secureInputOn: true, secureInputOwnerPID: 555)
+        await dictate("Hello.")
+        XCTAssertEqual(appState.status, .error(TranscriptionPipeline.savedWhileInFrontMessage))
+    }
+
+    func testFocusedDialogOwningSecureInputIsBlocked() async {
+        probe.reading = PasteGuardReading(focusedSubrole: nil, secureInputOn: true, secureInputOwnerPID: 555,
+                                          focusedPID: 555, focusedCategory: .other)
+        await dictate("hunter two")
+        XCTAssertEqual(paste.pasted, [])
+        XCTAssertTrue(history.entries.isEmpty)
+        XCTAssertEqual(appState.status, .error(TranscriptionPipeline.passwordFieldMessage))
+    }
+
     func testUnreadableFieldFailsOpen() async {
         probe.reading = PasteGuardReading(focusedSubrole: nil, secureInputOn: false, secureInputOwnerPID: nil)
         await dictate("Hello.")

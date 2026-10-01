@@ -16,6 +16,36 @@ final class FormattingRulesTests: XCTestCase {
         XCTAssertEqual(FormattingRules(finalFullStop: .keep).apply(to: "Ship it."), "Ship it.")
     }
 
+    func testFullStopThatDoesNotEndAWordStays() {
+        let rules = FormattingRules(finalFullStop: .drop)
+        XCTAssertEqual(rules.apply(to: "git add ."), "git add .", "a standalone full stop is part of the command")
+        XCTAssertEqual(rules.apply(to: "docker build . "), "docker build . ")
+        XCTAssertEqual(rules.apply(to: "."), ".")
+        XCTAssertEqual(rules.apply(to: "Wait\u{2026}"), "Wait\u{2026}")
+        XCTAssertEqual(rules.apply(to: "Hmm.."), "Hmm..")
+    }
+
+    func testAbbreviationsKeepTheirFullStop() {
+        let rules = FormattingRules(finalFullStop: .drop)
+        for kept in ["Bring snacks, e.g.", "Use a tool, i.e.", "Shipping to the U.S.", "Call at 9 a.m.",
+                     "Apples, pears, etc.", "Red vs.", "Talk to Dr.", "Smith et al.", "Acme Inc."] {
+            XCTAssertEqual(rules.apply(to: kept), kept, kept)
+        }
+        XCTAssertEqual(rules.apply(to: "Talk to (Dr."), "Talk to (Dr.", "leading punctuation doesn't hide it")
+        XCTAssertEqual(rules.apply(to: "Ship it."), "Ship it", "an ordinary word still loses it")
+        XCTAssertEqual(rules.apply(to: "Ship it in a."), "Ship it in a", "a single letter isn't an abbreviation")
+    }
+
+    func testFullStopAfterURLsNumbersAndBracketsIsStillDropped() {
+        let rules = FormattingRules(finalFullStop: .drop)
+        XCTAssertEqual(rules.apply(to: "Open example.com."), "Open example.com")
+        XCTAssertEqual(rules.apply(to: "Open notes.txt."), "Open notes.txt")
+        XCTAssertEqual(rules.apply(to: "Use version 3.5."), "Use version 3.5")
+        XCTAssertEqual(rules.apply(to: "Run it (later)."), "Run it (later)")
+        XCTAssertEqual(rules.apply(to: "Say \"done\"."), "Say \"done\"")
+        XCTAssertEqual(rules.apply(to: "Say \u{201C}done\u{201D}."), "Say \u{201C}done\u{201D}")
+    }
+
     func testStraightQuotes() {
         let rules = FormattingRules(quotes: .straight)
         XCTAssertEqual(rules.apply(to: "Run \u{201C}make test\u{201D} and I\u{2019}ll check \u{2018}it\u{2019}"),
@@ -31,6 +61,17 @@ final class FormattingRulesTests: XCTestCase {
         XCTAssertEqual(rules.apply(to: "\r\nstart\r\nend\r\n"), "start end")
         XCTAssertEqual(rules.apply(to: "no breaks here"), "no breaks here")
         XCTAssertEqual(FormattingRules(lineBreaks: .keep).apply(to: "a\nb\n"), "a\nb\n")
+    }
+
+    func testJoinLinesHandlesEveryLineSeparatorAndControlCharacters() {
+        let rules = FormattingRules(lineBreaks: .join)
+        XCTAssertEqual(rules.apply(to: "one\u{2028}two\u{2029}three"), "one two three")
+        XCTAssertEqual(rules.apply(to: "one\u{0085}two"), "one two")
+        XCTAssertEqual(rules.apply(to: "one\u{000B}two\u{000C}three"), "one two three")
+        XCTAssertEqual(rules.apply(to: "red\u{1B}[31m text\u{07}\u{7F}"), "red[31m text", "control characters removed")
+        XCTAssertEqual(rules.apply(to: "keep\ttabs"), "keep\ttabs")
+        XCTAssertEqual(rules.apply(to: "end\u{2028}"), "end", "no separator at the end")
+        XCTAssertEqual(FormattingRules(lineBreaks: .keep).apply(to: "a\u{1B}b"), "a\u{1B}b", "only joining strips them")
     }
 
     func testTrailingSpace() {
@@ -59,6 +100,8 @@ final class FormattingRulesTests: XCTestCase {
         XCTAssertEqual(rules.apply(to: "Jira is slow", protectedTerms: ["Jira"]), "Jira is slow")
         XCTAssertEqual(rules.apply(to: "Jira's queue", protectedTerms: ["Jira"]), "Jira's queue")
         XCTAssertEqual(rules.apply(to: "[Speaker 1] Hello"), "[Speaker 1] Hello", "speaker labels are never altered")
+        XCTAssertEqual(rules.apply(to: "3D printing starts today"), "3D printing starts today", "a leading digit")
+        XCTAssertEqual(rules.apply(to: "4K Video is ready"), "4K Video is ready")
     }
 
     // MARK: - Together
@@ -67,6 +110,7 @@ final class FormattingRulesTests: XCTestCase {
         let rules = FormattingRules.defaults(for: .terminal)
         XCTAssertEqual(rules.apply(to: "Run \u{201C}make test\u{201D} in the api folder."), "Run \"make test\" in the api folder")
         XCTAssertEqual(rules.apply(to: "first line\nsecond line\nthird line.\n"), "first line second line third line")
+        XCTAssertEqual(rules.apply(to: "git add ."), "git add .", "a command's standalone full stop stays")
     }
 
     func testCodeEditorDefaultsKeepLineBreaks() {
@@ -101,6 +145,10 @@ final class FormattingRulesTests: XCTestCase {
             "API keys rotate tonight.",
             "[Speaker 1] Hello there.\n[Speaker 2] Hi.",
             "Wait... really?",
+            "git add .",
+            "Apples, pears, etc.",
+            "red\u{1B}[31m\u{2028}text\u{000B}",
+            "3D printing.",
             "  Leading space and \u{2018}quotes\u{2019}. ",
             ".",
             "",
@@ -181,6 +229,8 @@ final class AppProfilesTests: XCTestCase {
 
     func testCategoryLookupByBundleID() {
         XCTAssertEqual(AppCategory.category(forBundleID: "com.googlecode.iterm2"), .terminal)
+        XCTAssertEqual(AppCategory.category(forBundleID: "co.zeit.hyper"), .terminal)
+        XCTAssertEqual(AppCategory.category(forBundleID: "org.tabby"), .terminal)
         XCTAssertEqual(AppCategory.category(forBundleID: "com.microsoft.VSCode"), .codeEditor)
         XCTAssertEqual(AppCategory.category(forBundleID: "com.tinyspeck.slackmacgap"), .chat)
         XCTAssertEqual(AppCategory.category(forBundleID: "com.example.notes"), .other)

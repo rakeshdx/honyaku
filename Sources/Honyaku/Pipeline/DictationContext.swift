@@ -22,6 +22,7 @@ enum AppCategory: String, Codable, CaseIterable, Sendable {
             .terminal: [
                 "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty", "dev.warp.Warp-Stable",
                 "net.kovidgoyal.kitty", "org.alacritty", "io.alacritty", "com.github.wez.wezterm", "com.cmuxterm.app",
+                "co.zeit.hyper", "org.tabby",
             ],
             .codeEditor: [
                 "com.microsoft.VSCode", "com.microsoft.VSCodeInsiders", "com.todesktop.230313mzl4w4u92",

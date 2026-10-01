@@ -79,30 +79,57 @@ struct FormattingRules: Codable, Equatable, Sendable {
     }
 
     /// One line: each whitespace run that contains a line break becomes a single space, and there's no
-    /// line break at either end.
+    /// line break at either end. `\R` covers every line separator (CR, LF, CRLF, U+2028, U+2029, U+0085, VT,
+    /// FF); other control characters except tab are removed, so nothing like an escape sequence reaches a
+    /// terminal.
     static func joinLines(_ text: String) -> String {
         text
             .replacingOccurrences(of: "^\\s*\\R\\s*", with: "", options: .regularExpression)
             .replacingOccurrences(of: "\\s*\\R\\s*$", with: "", options: .regularExpression)
             .replacingOccurrences(of: "[ \\t]*\\R\\s*", with: " ", options: .regularExpression)
+            .replacingOccurrences(of: "[\\u0000-\\u0008\\u000E-\\u001F\\u007F]", with: "", options: .regularExpression)
     }
 
-    /// Drops a single "." that ends the text (ignoring trailing whitespace); "...", "?" and "!" stay.
+    /// Characters a sentence-ending "." may follow besides letters and digits.
+    private static let fullStopFollows: Set<Character> = [")", "\"", "'", "\u{201D}", "\u{2019}", "\u{BB}"]
+
+    /// Common abbreviations that keep their full stop at the end of the text, compared lowercased.
+    static let abbreviations: Set<String> = [
+        "etc", "vs", "cf", "al", "approx", "misc", "inc", "ltd", "corp", "co", "jr", "sr", "mr", "mrs", "ms", "dr",
+        "prof", "st",
+    ]
+
+    /// Drops a single "." that ends the last word (ignoring trailing whitespace). It stays when it stands
+    /// alone ("git add ."), is part of "..." or ends an abbreviation ("e.g.", "U.S.", "etc."); "?" and "!"
+    /// always stay.
     static func droppingFinalFullStop(_ text: String) -> String {
-        guard let lastIndex = text.lastIndex(where: { !$0.isWhitespace }), text[lastIndex] == "." else { return text }
-        if lastIndex > text.startIndex, text[text.index(before: lastIndex)] == "." { return text }
+        guard let lastIndex = text.lastIndex(where: { !$0.isWhitespace }), text[lastIndex] == ".",
+              lastIndex > text.startIndex else { return text }
+        let before = text[text.index(before: lastIndex)]
+        guard before.isLetter || before.isNumber || fullStopFollows.contains(before) else { return text }
+        let wordStart = text[..<lastIndex].lastIndex(where: \.isWhitespace).map(text.index(after:)) ?? text.startIndex
+        if isAbbreviation(text[wordStart..<lastIndex]) { return text }
         var result = text
         result.remove(at: lastIndex)
         return result
     }
 
-    /// Lowercases the first letter unless the first word is "I" (or a contraction of it), has another
-    /// capital letter (API, iOS, GitHub), is a protected term, or is a speaker label.
+    /// "e.g", "U.S", "a.m" (letters separated by dots) or a common abbreviation such as "etc".
+    static func isAbbreviation(_ word: Substring) -> Bool {
+        let bare = word.drop { !($0.isLetter || $0.isNumber) }
+        if bare.range(of: "^(\\p{L}\\.)+\\p{L}$", options: .regularExpression) != nil { return true }
+        return abbreviations.contains(bare.lowercased())
+    }
+
+    /// Lowercases the first letter unless the first word is "I" (or a contraction of it), starts with a
+    /// digit (3D), has another capital letter (API, iOS, GitHub), is a protected term, or is a speaker label.
     static func lowercasingFirstLetter(_ text: String, protectedTerms: [String]) -> String {
         guard !text.hasPrefix("[Speaker "),
               let wordStart = text.firstIndex(where: { !$0.isWhitespace }) else { return text }
         let wordEnd = text[wordStart...].firstIndex(where: \.isWhitespace) ?? text.endIndex
         let word = text[wordStart..<wordEnd]
+        // A word starting with a digit ("3D", "4K") keeps its letters as they are
+        if word.first(where: { $0.isLetter || $0.isNumber })?.isNumber == true { return text }
         guard let letterIndex = word.firstIndex(where: \.isLetter), word[letterIndex].isUppercase else { return text }
         let letters = word[letterIndex...]
         let bare = letters.trimmingCharacters(in: .punctuationCharacters.union(.symbols))

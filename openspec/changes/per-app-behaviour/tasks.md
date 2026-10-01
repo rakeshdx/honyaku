@@ -25,7 +25,7 @@
 
 ## 5. Settings and History
 
-- [x] 5.1 Settings > Apps tab (`Views/AppsSettings.swift`): categories with rule pickers and reset; apps with their own rules (+ from running apps, "Choose app…", Delete); header and footer copy; accessibility labels
+- [x] 5.1 Settings > Apps tab (`PerApp/AppsSettings.swift`): categories with rule pickers and reset; apps with their own rules (+ from running apps, "Choose app…", Delete); header and footer copy; accessibility labels
 - [x] 5.2 Tab order: after Dictation for now (Vocabulary and Rewrite insert theirs before Apps when they merge)
 - [x] 5.3 History rows show the app's icon and name (fallback: bundle ID) and "Not pasted" for History-only entries
 - [x] 5.4 UI test: Settings > Apps opens and adding a running app lists it
@@ -37,8 +37,20 @@
 - [x] 6.3 `openspec validate per-app-behaviour --strict`
 ## 7. After custom-vocabulary merges
 
-- [ ] 7.1 Check that every enabled vocabulary term reaches the first-letter exception (today through `context.speechHints.glossary`); pass the full list if the vocabulary only fills the glossary for Whisper
+- [ ] 7.1 After custom-vocabulary merges and this branch rebases: switch `FormattingStage` from `context.speechHints.glossary` to `context.vocabularyTerms` (every enabled term, any engine), and add a pipeline test with the real `VocabularyPreparer` (review blocker 3; the glossary is filled only for Whisper in English or Auto)
 
-## 8. Manual checks
+## 8. Review fixes
 
-- [ ] 8.1 Developer, by hand: Safari password field (blocked, not saved); Terminal with Secure Keyboard Entry (pasted and saved, no notice); Slack (pasted); terminal one-line and no full stop; does push-to-talk still fire while secure input is on?
+- [x] 8.1 Final full stop: only after a letter, digit, ")" or closing quote; standalone ".", ellipses, dotted and common abbreviations keep theirs; tests ("git add .", "e.g.", "etc.", "U.S.", "...", URLs and numbers as before)
+- [x] 8.2 The secure-input warning only when the text is pasted: `FormattingStage` before `PasteGuardStage`, warn only when `pasteAllowed` and not Honyaku in front; tests
+- [x] 8.3 Probe: owner looked up only while secure input is on; one 0.25 s accessibility budget; the timeout scoped to each call; the owner compared with the focused element's PID too; decision-table tests
+- [x] 8.4 Damaged `app-profiles.json` moved aside with an Apps-tab notice; a file that can't be moved or is newer is never saved over; tests
+- [x] 8.5 First letter: a leading digit is never lowercased; joining handles every line separator and strips control characters; tests
+- [x] 8.6 Hyper and Tabby in Terminals
+- [x] 8.7 The last Settings tab is kept in the app's settings suite (`coordinator.features.defaults`), as in rewrite-modes, so UI tests never touch the user's settings
+- [x] 8.8 Tests leave no temporary folders or settings suites behind
+- [x] 8.9 Gates: clean build with no project warnings, 242 unit tests (history.json unchanged), 6 UI tests (the real `settingsTab` unchanged), `openspec validate --strict`
+
+## 9. Manual checks
+
+- [ ] 9.1 Developer, by hand: Safari password field (blocked, not saved); Terminal with Secure Keyboard Entry (pasted and saved, no notice); Slack (pasted); terminal one-line and no full stop; does push-to-talk still fire while secure input is on?

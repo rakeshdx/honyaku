@@ -10,7 +10,7 @@ The tab SHALL:
 
 The tab SHALL say that the rules change formatting only and that Honyaku never pastes into password fields.
 
-The rules SHALL be saved to `~/Library/Application Support/Honyaku/app-profiles.json` with owner-only permissions (0600), excluded from backup. Only changed categories and per-app overrides are stored. If the file can't be read, Honyaku SHALL use the defaults and SHALL NOT overwrite the file until the user changes a rule.
+The rules SHALL be saved to `~/Library/Application Support/Honyaku/app-profiles.json` with owner-only permissions (0600), excluded from backup. Only changed categories and per-app overrides are stored. If the file can't be read, Honyaku SHALL use the defaults, SHALL move the file aside as `app-profiles.damaged-<date>.json` and SHALL say so in the Apps tab. If the file can't be moved aside, or was written by a newer version of Honyaku, Honyaku SHALL leave it in place, SHALL say so in the Apps tab, and SHALL NOT save over it.
 
 #### Scenario: User adds an app from the running apps
 - **GIVEN** Ghostty is running
@@ -33,7 +33,17 @@ The rules SHALL be saved to `~/Library/Application Support/Honyaku/app-profiles.
 #### Scenario: The rules file is damaged
 - **GIVEN** app-profiles.json can't be read
 - **WHEN** Honyaku launches
-- **THEN** the default rules are used and the file is left as it is until the user changes a rule
+- **THEN** the default rules are used, the file is kept as app-profiles.damaged-<date>.json, and the Apps tab says so until the user dismisses it
+
+#### Scenario: The damaged file can't be moved aside
+- **GIVEN** app-profiles.json can't be read and can't be moved
+- **WHEN** the user changes a rule
+- **THEN** the change applies until Honyaku quits, the file is not overwritten, and the Apps tab says changes can't be saved
+
+#### Scenario: The rules file is from a newer version
+- **GIVEN** app-profiles.json was written by a newer version of Honyaku
+- **WHEN** Honyaku launches
+- **THEN** the default rules are used, the file is left unchanged even when the user changes a rule, and the Apps tab says so
 
 ### Requirement: History shows where each transcript went
 Each History row SHALL show the app the transcript was pasted into, or saved for, with its icon and name. If the app is no longer installed, the row SHALL show its bundle ID instead. A transcript saved without pasting SHALL say "Not pasted". Entries with no app recorded, such as older entries, SHALL show nothing extra.

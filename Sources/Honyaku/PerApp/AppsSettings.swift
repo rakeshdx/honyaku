@@ -17,6 +17,16 @@ private struct AppsSettingsForm: View {
 
     var body: some View {
         Form {
+            if let notice = store.fileNotice {
+                Section {
+                    HStack(alignment: .firstTextBaseline) {
+                        Label(notice, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Spacer()
+                        Button("Dismiss") { store.fileNotice = nil }
+                    }
+                }
+            }
             Section {
                 Text("Formatting only. Honyaku never changes your words here.")
                     .foregroundStyle(.secondary)
