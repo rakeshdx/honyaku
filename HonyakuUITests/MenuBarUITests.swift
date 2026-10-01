@@ -10,6 +10,9 @@ final class MenuBarUITests: XCTestCase {
         continueAfterFailure = false
         app.launchArguments = ["-HonyakuUITestSetupComplete", "YES"]
         app.launch()
+        // A long menu from the app in front can push the icon behind the notch. Finder's menu bar is short,
+        // so the icon is on screen whatever the developer was using.
+        XCUIApplication(bundleIdentifier: "com.apple.finder").activate()
     }
 
     override func tearDownWithError() throws {
@@ -19,7 +22,8 @@ final class MenuBarUITests: XCTestCase {
     /// Fails the test, rather than skipping it, when the icon can't be found.
     private func statusItem() -> XCUIElement {
         let item = app.statusItems["Honyaku"].firstMatch
-        XCTAssertTrue(item.waitForExistence(timeout: 5), "Honyaku menu bar icon should be visible")
+        XCTAssertTrue(item.waitForExistence(timeout: 5), "Honyaku menu bar icon should exist")
+        XCTAssertTrue(item.isHittable, "Honyaku menu bar icon should be on screen, not hidden behind the notch")
         return item
     }
 
@@ -47,8 +51,11 @@ final class MenuBarUITests: XCTestCase {
 
     func testRightClickShowsQuit() throws {
         statusItem().rightClick()
-        XCTAssertTrue(app.menuItems["Quit Honyaku"].waitForExistence(timeout: 2))
-        XCTAssertTrue(app.menuItems["Settings…"].exists)
+        // The icon's own menu, not the app's main menu (which also has "Quit Honyaku")
+        let quit = app.menuItems["statusMenu.quit"]
+        XCTAssertTrue(quit.waitForExistence(timeout: 2), "Right-click should open the icon's menu")
+        XCTAssertEqual(quit.title, "Quit Honyaku")
+        XCTAssertEqual(app.menuItems["statusMenu.settings"].title, "Settings…")
         app.typeKey(.escape, modifierFlags: [])
     }
 }

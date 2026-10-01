@@ -4,8 +4,8 @@ import Carbon.HIToolbox
 /// Registers a system-wide CGEventTap that activates push-to-talk on bare Control keydown.
 /// Uses flagsChanged events because Control is a modifier key — it never fires keyDown/keyUp.
 final class HotkeyService: HotkeyServiceProtocol {
-    var onRecordingStarted: (() -> Void)?
-    var onRecordingEnded: (() -> Void)?
+    var onRecordingStarted: ((DictationMode) -> Void)?
+    var onRecordingEnded: ((DictationMode) -> Void)?
     var onRecordingCancelled: (() -> Void)?
 
     private var eventTap: CFMachPort?
@@ -82,10 +82,10 @@ final class HotkeyService: HotkeyServiceProtocol {
 
         switch action {
         case .start:
-            DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?() }
+            DispatchQueue.main.async { [weak self] in self?.onRecordingStarted?(.dictate) }
             return true  // suppress bare Control from reaching other apps
         case .end:
-            DispatchQueue.main.async { [weak self] in self?.onRecordingEnded?() }
+            DispatchQueue.main.async { [weak self] in self?.onRecordingEnded?(.dictate) }
             return true
         case .cancel:
             // Too short to transcribe — still stop capture so the mic is released

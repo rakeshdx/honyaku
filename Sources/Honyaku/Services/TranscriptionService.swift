@@ -17,18 +17,19 @@ actor TranscriptionService: ASRService {
     private static let log = Logger(subsystem: "com.honyaku.app", category: "transcription")
 
     func transcribe(audioURL: URL, modelID: String) async throws -> TranscriptionResult {
-        try await transcribe(audioURL: audioURL, samples16k: nil, modelID: modelID)
+        try await transcribe(audioURL: audioURL, samples16k: nil, modelID: modelID, hints: .none)
     }
 
     /// `samples16k` is the same audio as 16 kHz mono floats, which Parakeet uses directly.
-    func transcribe(audioURL: URL, samples16k: [Float]?, modelID: String) async throws -> TranscriptionResult {
+    func transcribe(audioURL: URL, samples16k: [Float]?, modelID: String,
+                    hints: SpeechHints) async throws -> TranscriptionResult {
         defer { Self.deleteTempFile(audioURL) }
 
         let engine = try await loadEngine(modelID: modelID)
 
         return try await withThrowingTaskGroup(of: TranscriptionResult.self) { group in
             group.addTask {
-                try await engine.transcribe(audioURL: audioURL, samples16k: samples16k)
+                try await engine.transcribe(audioURL: audioURL, samples16k: samples16k, hints: hints)
             }
             group.addTask {
                 try await Task.sleep(for: .seconds(self.timeoutSeconds))
@@ -172,6 +173,11 @@ actor TranscriptionService: ASRService {
 
     /// UserDefaults key for the multilingual model's dictation language: a Whisper language code, or absent for Auto-detect.
     static let dictationLanguageKey = "dictationLanguage"
+
+    /// The dictation language saved in `defaults`, or nil for Auto-detect (Settings stores that as "").
+    static func dictationLanguage(in defaults: UserDefaults) -> String? {
+        defaults.string(forKey: dictationLanguageKey).flatMap { $0.isEmpty ? nil : $0 }
+    }
 
     /// The languages Whisper supports, by display name, one entry per code (the table has aliases).
     static let dictationLanguages: [(name: String, code: String)] = {

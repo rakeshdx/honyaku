@@ -28,14 +28,7 @@ final class ModelBenchmarkTests: IntegrationTestBase {
     // MARK: - Speech
 
     func testSpeechEngines() async throws {
-        // The test host shares the app's settings: run with Auto-detect, and put the user's choice back after
-        let languageKey = TranscriptionService.dictationLanguageKey
-        let savedLanguage = UserDefaults.standard.object(forKey: languageKey)
-        UserDefaults.standard.set("", forKey: languageKey)
-        defer {
-            if let savedLanguage { UserDefaults.standard.set(savedLanguage, forKey: languageKey) }
-            else { UserDefaults.standard.removeObject(forKey: languageKey) }
-        }
+        // Auto-detect unless a call passes a language: the user's dictation-language setting is never read or written
         let clips = try Self.sentences.enumerated().map { try Self.renderSpeech($0.element, name: "clip\($0.offset)") }
         var report = ["| Speech model | WER | Median time | Slowest |", "|---|---|---|---|"]
         var measuredAny = false
@@ -77,10 +70,8 @@ final class ModelBenchmarkTests: IntegrationTestBase {
                 }
 
                 // With the language chosen, a short phrase can't be mistaken for another language
-                UserDefaults.standard.set("it", forKey: languageKey)
                 let short = try Self.renderSpeech("Dov'è la stazione?", name: "foreign-short-it", voice: "Alice")
-                let heard = try await transcribe(short, with: service, model: model)
-                UserDefaults.standard.set("", forKey: languageKey)
+                let heard = try await transcribe(short, with: service, model: model, language: "it")
                 print("Foreign, \(model.id), Italian chosen: \(heard)")
                 XCTAssertTrue(heard.lowercased().contains("stazione"), "Italian chosen, got: \(heard)")
             }
@@ -154,12 +145,14 @@ final class ModelBenchmarkTests: IntegrationTestBase {
         !Set(text.lowercased().split { !$0.isLetter }.map(String.init)).isDisjoint(with: ["um", "umm", "uh", "hmm"])
     }
 
-    private func transcribe(_ clip: URL, with service: TranscriptionService, model: Honyaku.ModelInfo) async throws -> String {
+    private func transcribe(_ clip: URL, with service: TranscriptionService, model: Honyaku.ModelInfo,
+                            language: String? = nil) async throws -> String {
         // The service deletes its input, so hand it a copy named like a real dictation
         let copy = FileManager.default.temporaryDirectory.appending(path: "honyaku_bench_\(UUID()).wav")
         try FileManager.default.copyItem(at: clip, to: copy)
         let samples = try AudioProcessor.loadAudioAsFloatArray(fromPath: clip.path)
-        return try await service.transcribe(audioURL: copy, samples16k: samples, modelID: model.id).rawText
+        return try await service.transcribe(audioURL: copy, samples16k: samples, modelID: model.id,
+                                            hints: SpeechHints(language: language)).rawText
     }
 
     private static let workDir: URL = {

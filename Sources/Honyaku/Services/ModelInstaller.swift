@@ -118,25 +118,32 @@ actor ModelInstaller {
     // MARK: - Delete
 
     func delete(_ model: ModelInfo) throws {
-        let fm = FileManager.default
+        guard let folder = try Self.deletionFolder(for: model) else { return }
+        if FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
+    }
+
+    /// The folder deleting `model` removes, or nil when there's nothing of its own to remove (SpeakerKit).
+    /// Throws for a name that could reach outside the model's own folder. Pure, so tests pass temporary bases.
+    nonisolated static func deletionFolder(
+        for model: ModelInfo, modelsBase: URL = ModelStore.shared.baseDirectory,
+        documents: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    ) throws -> URL? {
         switch model.engine {
         case .speakerKit:
-            return
+            return nil
         case .parakeet:
-            let folder = ModelInstaller.parakeetFolder()
-            if fm.fileExists(atPath: folder.path) { try fm.removeItem(at: folder) }
+            return parakeetFolder(base: modelsBase)
         case .whisperKit:
-            guard let variant = model.whisperVariant,
-                  ModelInstaller.isSafePathPart(variant), ModelInstaller.isSafePathPart(model.hfRepoPath) else {
+            guard let variant = model.whisperVariant, isSafePathPart(variant), isSafePathPart(model.hfRepoPath) else {
                 throw ModelDownloadError.fileSystemError(CocoaError(.fileWriteInvalidFileName))
             }
-            let folder = TranscriptionService.localModelFolder(repo: model.hfRepoPath, variant: variant)
-            if fm.fileExists(atPath: folder.path) { try fm.removeItem(at: folder) }
+            return TranscriptionService.localModelFolder(repo: model.hfRepoPath, variant: variant, documents: documents)
         case .mlx:
-            guard ModelInstaller.isSafePathPart(model.id) else {
+            guard isSafePathPart(model.id) else {
                 throw ModelDownloadError.fileSystemError(CocoaError(.fileWriteInvalidFileName))
             }
-            try ModelStore.shared.delete(model)
+            // Same folder as ModelStore.modelDirectory(for:)
+            return modelsBase.appendingPathComponent("\(model.type.rawValue)/\(model.id)", isDirectory: true)
         }
     }
 

@@ -10,11 +10,15 @@ actor PasteService: PasteServiceProtocol {
     private let pasteboardClearDelaySeconds: Double = 5.0
     private let sendPasteKeystroke: @Sendable () throws -> Void
     private let restoreDelay: Duration
+    /// The system clipboard in the app; tests pass a private pasteboard so the user's clipboard is never touched.
+    /// NSPasteboard isn't Sendable, but it is thread-safe for the reads and writes made here.
+    private nonisolated(unsafe) let pasteboard: NSPasteboard
 
     /// `sendPasteKeystroke` defaults to a real ⌘V; tests inject a recorder so they never type into other apps.
     /// `restoreDelay` must outlast slow clipboard readers — terminals missed the paste at 150 ms.
-    init(restoreDelay: Duration = .milliseconds(500),
+    init(pasteboard: NSPasteboard = .general, restoreDelay: Duration = .milliseconds(500),
          sendPasteKeystroke: @escaping @Sendable () throws -> Void = { try PasteService.postCommandV() }) {
+        self.pasteboard = pasteboard
         self.restoreDelay = restoreDelay
         self.sendPasteKeystroke = sendPasteKeystroke
     }
@@ -26,7 +30,6 @@ actor PasteService: PasteServiceProtocol {
     /// Pastes `text` and returns as soon as ⌘V is posted, so the next dictation isn't blocked;
     /// the previous clipboard is restored in the background after `restoreDelay`.
     func paste(_ text: String) async throws {
-        let pasteboard = NSPasteboard.general
         // A pending restore holds the user's real clipboard — the pasteboard now holds our last transcript
         let priorItems: ClipboardItems
         if let pending = pendingRestore {
@@ -67,7 +70,6 @@ actor PasteService: PasteServiceProtocol {
     private func finishRestore(expectedChangeCount: Int) {
         guard !Task.isCancelled, let pending = pendingRestore else { return }  // superseded by a newer paste
         pendingRestore = nil
-        let pasteboard = NSPasteboard.general
         // If anything was copied meanwhile, it's newer than what we'd restore — leave it
         guard pasteboard.changeCount == expectedChangeCount else { return }
         Self.restore(pending.items, to: pasteboard)
@@ -87,8 +89,9 @@ actor PasteService: PasteServiceProtocol {
         if delay > 0 {
             try? await Task.sleep(for: .seconds(delay))
         }
+        nonisolated(unsafe) let pasteboard = pasteboard
         await MainActor.run {
-            _ = NSPasteboard.general.clearContents()
+            _ = pasteboard.clearContents()
         }
     }
 

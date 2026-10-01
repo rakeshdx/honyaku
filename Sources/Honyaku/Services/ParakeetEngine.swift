@@ -16,7 +16,7 @@ struct ParakeetEngine: SpeechEngine {
         self.manager = manager
     }
 
-    func transcribe(audioURL: URL, samples16k: [Float]?) async throws -> TranscriptionResult {
+    func transcribe(audioURL: URL, samples16k: [Float]?, hints: SpeechHints) async throws -> TranscriptionResult {
         // An empty array means the capture-side conversion failed; decode the file instead
         let samples = try samples16k.flatMap { $0.isEmpty ? nil : $0 } ?? AudioConverter().resampleAudioFile(audioURL)
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)

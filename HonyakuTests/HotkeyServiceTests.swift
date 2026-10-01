@@ -9,7 +9,7 @@ final class HotkeyServiceTests: XCTestCase {
         }
         let service = HotkeyService()
         var recordingStarted = false
-        service.onRecordingStarted = { recordingStarted = true }
+        service.onRecordingStarted = { _ in recordingStarted = true }
         service.setPipelineBusyCheck { true }  // pipeline always busy
 
         // Cannot directly fire CGEvent in unit tests without Accessibility;

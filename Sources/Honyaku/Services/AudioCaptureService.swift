@@ -10,7 +10,7 @@ enum AudioCaptureError: Error {
 
 /// Captures audio only while explicitly started; tears down the tap on every stop.
 /// The microphone access session is NEVER held open between recordings.
-final class AudioCaptureService {
+final class AudioCaptureService: AudioCapturing {
     private let engine = AVAudioEngine()
     private var pcmBuffers: [AVAudioPCMBuffer] = []
     private var selectedDeviceID: AudioDeviceID?

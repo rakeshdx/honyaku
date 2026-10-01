@@ -20,7 +20,7 @@ final class TranscriptionIntegrationTests: IntegrationTestBase {
         let cleanupService = CleanupService()
 
         let result = try await transcriptionService.transcribe(audioURL: audioURL, modelID: ModelRegistry.defaultSpeechModelID)
-        let cleaned = try await cleanupService.clean(result.rawText, prompt: CleanupService.defaultPrompt)
+        let cleaned = try await cleanupService.clean(result.rawText, request: CleanupRequest(systemPrompt: CleanupService.defaultPrompt))
 
         let fillers = ["um,", "uh,", " um ", " uh "]
         let hasFillers = fillers.contains { cleaned.lowercased().contains($0) }
@@ -33,7 +33,7 @@ final class TranscriptionIntegrationTests: IntegrationTestBase {
         let cleanupService = CleanupService()
 
         let result = try await transcriptionService.transcribe(audioURL: audioURL, modelID: ModelRegistry.defaultSpeechModelID)
-        let cleaned = try await cleanupService.clean(result.rawText, prompt: CleanupService.defaultPrompt)
+        let cleaned = try await cleanupService.clean(result.rawText, request: CleanupRequest(systemPrompt: CleanupService.defaultPrompt))
 
         XCTAssertFalse(cleaned.isEmpty, "Clean monologue should produce non-empty cleaned output")
         // The word count should not drop dramatically (< 50% of original is suspicious)
@@ -55,7 +55,6 @@ final class TranscriptionIntegrationTests: IntegrationTestBase {
         } catch TranscriptionError.emptyResult {
             // Also acceptable — empty result throws
         }
-        // Verify no text was left on the pasteboard
-        XCTAssertNil(NSPasteboard.general.string(forType: .string))
+        // The speech service never touches the clipboard; this test doesn't read the user's clipboard either
     }
 }

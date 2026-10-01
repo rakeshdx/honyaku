@@ -4,14 +4,17 @@ import Foundation
 final class TranscriptStore: ObservableObject {
     @Published private(set) var entries: [TranscriptEntry] = []
 
-    private let fileURL: URL = {
+    nonisolated static let defaultFileURL: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return appSupport.appendingPathComponent("Honyaku/history.json")
     }()
 
+    private let fileURL: URL
     private let persistsToDisk: Bool
 
-    init() {
+    /// `fileURL` is the user's history.json unless a test passes a temporary file.
+    init(fileURL: URL = TranscriptStore.defaultFileURL) {
+        self.fileURL = fileURL
         persistsToDisk = true
         prepareDirectory()
         load()
@@ -19,6 +22,7 @@ final class TranscriptStore: ObservableObject {
 
     /// A store that never reads or writes history.json — for tests and design renders.
     init(inMemory entries: [TranscriptEntry]) {
+        fileURL = TranscriptStore.defaultFileURL
         persistsToDisk = false
         self.entries = entries
     }

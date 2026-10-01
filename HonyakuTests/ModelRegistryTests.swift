@@ -61,10 +61,10 @@ final class ModelRegistryTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set("qwen-3b-mlx", forKey: "selectedCleanupModelID")
-        let resolved = AppState.resolvedSelection(key: "selectedCleanupModelID", fallback: "qwen3-1.7b", defaults: defaults)
+        let state = AppState(defaults: defaults)
         let expected = ModelRegistry.recommended(forPhysicalMemory: ProcessInfo.processInfo.physicalMemory).cleanup
-        XCTAssertEqual(resolved, expected)
-        XCTAssertTrue(AppState.migratedSelectionKeys.contains("selectedCleanupModelID"))
+        XCTAssertEqual(state.selectedCleanupModelID, expected)
+        XCTAssertEqual(state.migratedSelectionKeys, ["selectedCleanupModelID"])
         XCTAssertEqual(defaults.string(forKey: "selectedCleanupModelID"), expected,
                        "CleanupService reads UserDefaults directly, so the migration must be saved")
     }
