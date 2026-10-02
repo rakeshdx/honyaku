@@ -324,7 +324,8 @@ final class TranscriptionPipeline {
         let request = CleanupRequest(
             systemPrompt: defaults.string(forKey: "cleanupPrompt") ?? CleanupService.defaultPrompt,
             extraRules: context.cleanupRules,
-            englishFillers: context.englishFillers)
+            englishFillers: context.englishFillers,
+            protectedTerms: context.vocabularyTerms)
         do {
             let cleaned = try await cleanup.clean(text, request: request)
             let trimmed = cleaned.trimmingCharacters(in: .whitespacesAndNewlines)

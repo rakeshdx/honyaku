@@ -1,8 +1,11 @@
-/// What OpenSpec change `custom-vocabulary` adds to the pipeline. Empty until that feature lands; it plugs in by
-/// editing only this file (see `PipelineStages.live(_:)` for where these run).
+/// What OpenSpec change `custom-vocabulary` adds to the pipeline (see `PipelineStages.live(_:)` for where
+/// these run): the Whisper hint and cleanup rule before transcription, and the corrections after it.
 @MainActor
 enum VocabularyStages {
     static func make(_ environment: FeatureEnvironment) -> PipelineStages {
-        .none
+        let store = environment.store(VocabularyStore.self)
+        let snapshot = VocabularySnapshot()
+        return PipelineStages(preparers: [VocabularyPreparer(store: store, snapshot: snapshot)],
+                              afterTranscription: [VocabularyCorrectionStage(snapshot: snapshot)])
     }
 }

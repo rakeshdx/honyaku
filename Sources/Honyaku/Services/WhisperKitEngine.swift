@@ -6,6 +6,9 @@ import WhisperKit
 final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
     // WhisperKit isn't Sendable; TranscriptionService runs one dictation at a time
     private let kit: WhisperKit
+    /// The last vocabulary glossary and its prompt tokens, so an unchanged list isn't re-encoded each time.
+    private var hintCache: (glossary: [String], tokens: [Int]?)?
+    private var hasPromptBlankFilter = false
 
     init(kit: WhisperKit) {
         self.kit = kit
@@ -14,7 +17,11 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
     func transcribe(audioURL: URL, samples16k: [Float]?, hints: SpeechHints) async throws -> TranscriptionResult {
         // The pipeline reads the setting on every dictation, so a change in Settings applies at once
         let language = hints.language
-        let options = TranscriptionService.decodeOptions(forDurationSeconds: Self.duration(of: audioURL), language: language)
+        var options = TranscriptionService.decodeOptions(forDurationSeconds: Self.duration(of: audioURL), language: language)
+        if let tokens = promptTokens(for: hints.glossary) {
+            options.promptTokens = tokens
+            options.usePrefillPrompt = true
+        }
         let segments = try await kit.transcribe(audioPath: audioURL.path, decodeOptions: options)
         guard !segments.isEmpty, let first = segments.first else {
             throw TranscriptionError.emptyResult
@@ -35,6 +42,24 @@ final class WhisperKitEngine: SpeechEngine, @unchecked Sendable {
             durationSeconds: duration,
             timedSegments: timed
         )
+    }
+
+    /// The vocabulary as Whisper's previous-context prompt (see `WhisperHint`); nil without a glossary.
+    private func promptTokens(for glossary: [String]) -> [Int]? {
+        guard !glossary.isEmpty, let tokenizer = kit.tokenizer else { return nil }
+        if !hasPromptBlankFilter {
+            // Without it, WhisperKit 0.18.0 ends a prompted window before its first word (see the filter)
+            kit.textDecoder.logitsFilters = (kit.textDecoder.logitsFilters ?? [])
+                + [WhisperPromptBlankFilter(specialTokens: tokenizer.specialTokens)]
+            hasPromptBlankFilter = true
+        }
+        if let hintCache, hintCache.glossary == glossary { return hintCache.tokens }
+        let specialBegin = tokenizer.specialTokens.specialTokenBegin
+        let tokens = WhisperHint.promptTokens(glossary: glossary) { text in
+            tokenizer.encode(text: text).filter { $0 < specialBegin }
+        }
+        hintCache = (glossary, tokens)
+        return tokens
     }
 
     private static func duration(of url: URL) -> Double? {

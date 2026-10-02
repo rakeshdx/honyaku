@@ -26,6 +26,9 @@ struct CleanupRequest: Equatable, Sendable {
     var maxTokens: Int?
     /// Whether um/uh and the set-off English fillers may be dropped. Only for English transcripts.
     var englishFillers = true
+    /// Vocabulary terms strict output must keep exactly: as many occurrences as the input has, with the same
+    /// letter case and characters such as "+" that the word comparison ignores.
+    var protectedTerms: [String] = []
 }
 
 actor CleanupService: CleanupServiceProtocol {
@@ -76,7 +79,8 @@ actor CleanupService: CleanupServiceProtocol {
         if output.isEmpty { return rawText }
         guard request.faithfulness == .strict else { return output }
         // Never trust the model with the user's words: if it lost or added any, keep theirs
-        guard isFaithful(raw: rawText, cleaned: output, englishFillers: request.englishFillers) else {
+        guard isFaithful(raw: rawText, cleaned: output, englishFillers: request.englishFillers),
+              keepsTerms(request.protectedTerms, raw: rawText, cleaned: output) else {
             // Transcript text is never logged
             log.info("Cleanup output changed the transcript's words; using raw transcript")
             return request.englishFillers ? removeUnambiguousFillers(rawText) : rawText
@@ -84,6 +88,17 @@ actor CleanupService: CleanupServiceProtocol {
         return output
     }
 
+
+    /// No protected term lost an exact occurrence ("Paramount+" → "Paramount" passes the word comparison).
+    static func keepsTerms(_ terms: [String], raw: String, cleaned: String) -> Bool {
+        terms.allSatisfy { term in
+            term.isEmpty || occurrences(of: term, in: cleaned) >= occurrences(of: term, in: raw)
+        }
+    }
+
+    private static func occurrences(of term: String, in text: String) -> Int {
+        text.components(separatedBy: term).count - 1
+    }
 
     func clean(_ rawText: String, request: CleanupRequest) async throws -> String {
         guard !rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
