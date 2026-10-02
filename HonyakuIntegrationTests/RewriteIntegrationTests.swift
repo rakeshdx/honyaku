@@ -28,6 +28,37 @@ final class RewriteIntegrationTests: IntegrationTestBase {
         assertInventsNothing(output, transcript: transcript)
     }
 
+    /// `fix-rewrite-grounding`: the user's vocabulary (in memory, never their real file) and a short agent
+    /// prompt mentioning only P+. The rewrite step, with the real model, must never end up pasting Paramount+
+    /// or POPS: the prompt names only P+, and the invention check catches the model adding the others.
+    @MainActor
+    func testAShortAgentPromptNeverAddsUnsaidVocabularyTerms() async throws {
+        let installed = ModelRegistry.cleanupModels.filter(ModelInstaller.isInstalled)
+        try XCTSkipIf(installed.isEmpty, "No cleanup model is downloaded")
+        let model = installed.first { $0.id == "qwen3-4b-2507" } ?? installed[0]
+        let terms = [
+            VocabularyTerm(term: "Paramount+", heardAs: ["Paramount plus", "para mount plus"]),
+            VocabularyTerm(term: "P+", heardAs: ["P Plus"]),
+            VocabularyTerm(term: "POPS"),
+        ]
+        let snapshot = VocabularySnapshot()
+        snapshot.matcher = VocabularyMatcher(terms: terms)
+        var context = DictationContext(mode: .rewrite)
+        context.vocabularyMatcher = snapshot.matcher
+        let transcript = VocabularyCorrectionStage(snapshot: snapshot)
+            .apply("check that the p plus login works on staging", context: &context)
+        XCTAssertEqual(transcript, "check that the P+ login works on staging")
+        XCTAssertEqual(context.cleanupRules, ["Write these terms exactly as listed: P+."])
+
+        let plan = RewritePlan(template: .agentPrompt)
+        let result = await RewriteStep.run(transcript, plan: plan, installed: true, context: &context,
+                                           cleanup: CleanupService(modelID: model.id))
+        print("Rewrite with \(model.id), mode afterwards \(context.mode), notices \(context.notices):\n\(result)")
+        XCTAssertFalse(result.contains("POPS"), result)
+        XCTAssertFalse(result.contains("Paramount+"), result)
+        XCTAssertTrue(result.contains("P+"), "The term that was said is kept: \(result)")
+    }
+
     // MARK: - Helpers
 
     private func rewrite(_ transcript: String, as template: RewriteTemplateID) async throws -> String {

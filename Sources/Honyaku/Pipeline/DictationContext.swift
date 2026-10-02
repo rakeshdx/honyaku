@@ -116,6 +116,9 @@ struct DictationContext: Sendable {
     /// Every enabled vocabulary term, as written, for any engine and language. Formatting leaves these
     /// alone and cleanup must keep them (`speechHints.glossary` is only the Whisper hint).
     var vocabularyTerms: [String] = []
+    /// The vocabulary as it was when the dictation started, to tell which terms a text contains (nil
+    /// without enabled terms). A rewrite uses it to reject terms the speaker didn't say.
+    var vocabularyMatcher: VocabularyMatcher?
 
     /// For a rewrite: the template and its prompt, chosen for `appAtStart` (see `RewriteStages`).
     var rewrite: RewritePlan?

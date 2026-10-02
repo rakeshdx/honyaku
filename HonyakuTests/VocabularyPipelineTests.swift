@@ -76,14 +76,21 @@ final class VocabularyPipelineTests: XCTestCase {
         XCTAssertEqual(paste.pasted, ["file a jira", "file a Jira"])
     }
 
-    func testCleanupPromptGetsTheRuleOnlyWithEnabledTerms() async throws {
+    func testCleanupPromptGetsTheRuleOnlyForTermsInTheTranscript() async throws {
+        transcription.text = "file a jira about paramount plus"
         await dictate()
         XCTAssertEqual(cleanup.requests.last?.extraRules, [])
 
-        try vocabulary.add(term: "Paramount+")
+        try vocabulary.add(term: "Paramount+", heardAs: ["paramount plus"])
         try vocabulary.add(term: "Jira")
+        try vocabulary.add(term: "POPS")
         await dictate()
-        XCTAssertEqual(cleanup.requests.last?.extraRules, ["Write these terms exactly as listed: Paramount+, Jira."])
+        XCTAssertEqual(cleanup.requests.last?.extraRules, ["Write these terms exactly as listed: Paramount+, Jira."],
+                       "POPS wasn't said, so it isn't listed (fix-rewrite-grounding)")
+
+        transcription.text = "let's meet at noon"
+        await dictate()
+        XCTAssertEqual(cleanup.requests.last?.extraRules, [], "No listed term said: no rule")
     }
 
     func testWhisperWithEnglishOrAutoGetsTheGlossaryTopTermLast() async throws {

@@ -7,8 +7,8 @@ final class VocabularySnapshot {
     var matcher: VocabularyMatcher?
 }
 
-/// Before transcription: the snapshot, the terms for later stages, the Whisper hint and the cleanup
-/// prompt's "write these exactly" rule.
+/// Before transcription: the snapshot, the terms for later stages and the Whisper hint. The cleanup
+/// prompt's "write these exactly" rule waits for the transcript (see `VocabularyCorrectionStage`).
 @MainActor
 struct VocabularyPreparer: DictationContextPreparer {
     let store: VocabularyStore
@@ -19,7 +19,7 @@ struct VocabularyPreparer: DictationContextPreparer {
         snapshot.matcher = enabled.isEmpty ? nil : store.matcher
         guard !enabled.isEmpty else { return }
         context.vocabularyTerms = enabled.map(\.term)
-        if let rule = store.promptRule { context.cleanupRules.append(rule) }
+        context.vocabularyMatcher = snapshot.matcher
         if Self.sendsWhisperHint(speechModelID: context.speechModelID, language: context.speechHints.language) {
             // Most important last: WhisperKit drops the start of a long prompt
             context.speechHints.glossary = enabled.map(\.term).reversed()
@@ -36,12 +36,18 @@ struct VocabularyPreparer: DictationContextPreparer {
 }
 
 /// After transcription and the speaker-label merge: listed spellings become the terms as written, using
-/// the list from when the dictation started.
+/// the list from when the dictation started. Then the cleanup prompt's "write these exactly" rule, for the
+/// terms the corrected transcript contains only.
 @MainActor
 struct VocabularyCorrectionStage: TextStage {
     let snapshot: VocabularySnapshot
 
     func apply(_ text: String, context: inout DictationContext) -> String {
-        snapshot.matcher?.apply(text) ?? text
+        guard let matcher = snapshot.matcher else { return text }
+        let corrected = matcher.apply(text)
+        if let rule = VocabularyStore.promptRule(for: matcher.matchedTerms(in: corrected)) {
+            context.cleanupRules.append(rule)
+        }
+        return corrected
     }
 }

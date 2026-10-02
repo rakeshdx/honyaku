@@ -41,12 +41,24 @@ struct VocabularyMatcher: Sendable {
     }
 
     func apply(_ text: String) -> String {
-        guard !candidates.isEmpty, !text.isEmpty else { return text }
+        scan(text).output
+    }
+
+    /// The terms, as written, that occur in `text` by any of their spellings, in list order and without
+    /// repeats. Uses the same rules as `apply`: boundaries, contractions, links and code, speaker labels.
+    func matchedTerms(in text: String) -> [String] {
+        scan(text).matches.sorted { $0.rank < $1.rank }.map(\.term)
+    }
+
+    /// One left-to-right pass: the corrected text, and each term matched (once, by its best rank).
+    private func scan(_ text: String) -> (output: String, matches: [(term: String, rank: Int)]) {
+        guard !candidates.isEmpty, !text.isEmpty else { return (text, []) }
         let characters = Array(text)
         let folded = characters.map { Self.fold($0) }
         let protected = Self.protectedTokens(in: characters)
         var output = ""
         output.reserveCapacity(text.utf8.count)
+        var matched: [String: Int] = [:]
         var index = 0
         while index < characters.count {
             if let labelEnd = Self.speakerLabelEnd(in: characters, at: index) {
@@ -57,19 +69,20 @@ struct VocabularyMatcher: Sendable {
             let atBoundary = index == 0 || Self.isBoundary(characters[index - 1], characters[index])
             if atBoundary, let match = longestMatch(in: characters, folded: folded, at: index, protected: protected) {
                 output += match.replacement
+                matched[match.replacement] = min(matched[match.replacement] ?? .max, match.rank)
                 index = match.end
                 continue
             }
             output.append(characters[index])
             index += 1
         }
-        return output
+        return (output, matched.map { (term: $0.key, rank: $0.value) })
     }
 
     // MARK: - Matching
 
     private func longestMatch(in characters: [Character], folded: [String], at start: Int,
-                              protected: [ProtectedToken]) -> (replacement: String, end: Int)? {
+                              protected: [ProtectedToken]) -> (replacement: String, end: Int, rank: Int)? {
         guard let options = candidates[folded[start]] else { return nil }
         var best: (replacement: String, end: Int, rank: Int)?
         for candidate in options {
@@ -83,7 +96,7 @@ struct VocabularyMatcher: Sendable {
             }
             best = (candidate.replacement, end, candidate.rank)
         }
-        return best.map { ($0.replacement, $0.end) }
+        return best
     }
 
     /// Where `units` stop matching the text from `start`, or nil if they don't.

@@ -185,6 +185,30 @@ enum RewritePrompt {
         return (words * 4 + 2) / 3 + unspaced
     }
 
+    /// Fewer words than this aren't rewritten: every template needs at least a verb and an object, and a
+    /// model given two words pads them with things the speaker never said.
+    static let minimumWords = 4
+
+    /// Whether `text` is too short to rewrite: under `minimumWords`, counting whitespace-separated runs with a
+    /// letter or digit, plus one word per 2 characters of a script written without spaces. Speaker labels
+    /// don't count.
+    static func isTooShort(_ text: String) -> Bool {
+        let unlabelled = text.replacingOccurrences(of: #"\[Speaker \d+\]"#, with: " ", options: .regularExpression)
+        var unspaced = 0
+        var spaced = String.UnicodeScalarView()
+        for scalar in unlabelled.unicodeScalars {
+            if isWrittenWithoutSpaces(scalar) {
+                if CharacterSet.letters.contains(scalar) || CharacterSet.decimalDigits.contains(scalar) { unspaced += 1 }
+                spaced.append(" ")
+            } else {
+                spaced.append(scalar)
+            }
+        }
+        let words = String(spaced).split { $0.isWhitespace }
+            .filter { $0.contains { $0.isLetter || $0.isNumber } }.count
+        return words + unspaced / 2 < minimumWords
+    }
+
     private static func isWrittenWithoutSpaces(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3000...0x30FF,    // CJK punctuation, hiragana, katakana
@@ -272,6 +296,8 @@ enum RewriteCopy {
     static let noModelNotice = "To use Rewrite, download a cleanup model in Settings > Models"
     static let failedNotice = "Couldn't rewrite: used your words as dictated"
     static let cutShortNotice = "The rewrite was cut short"
+    static let tooShortNotice = "Too short to rewrite: used your words as dictated"
+    static let inventedNotice = "Couldn't rewrite without adding things you didn't say: used your words as dictated"
     static let generalHint = "Hold Control+Shift to rewrite as a Jira ticket, chat message, email and more."
     static let tabIntro = "Hold Control+Shift to rewrite what you say in a format for where it's going."
 
