@@ -12,6 +12,7 @@ struct GeneralSettings: View {
         Form {
             Section {
                 StatusCard()
+                RewriteGeneralHint()
             }
             Section {
                 Toggle("Open Honyaku when you log in", isOn: $launchAtLogin)
@@ -37,7 +38,7 @@ struct GeneralSettings: View {
             }
         }
         .formStyle(.grouped)
-        .frame(width: 500, height: 420)
+        .frame(width: 500, height: 450)
         .onAppear { permissionManager.checkAll() }
     }
 }
@@ -498,11 +499,14 @@ private struct HistoryRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Text(entry.cleanedText)
-                .font(Theme.transcript)
-                .lineSpacing(Theme.transcriptLineSpacing)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.cleanedText)
+                    .font(Theme.transcript)
+                    .lineSpacing(Theme.transcriptLineSpacing)
+                    .textSelection(.enabled)
+                RewriteHistoryDetails(entry: entry)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             VStack(alignment: .trailing, spacing: 4) {
                 Text(entry.timestamp.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
                     .font(.caption)

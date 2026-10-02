@@ -30,6 +30,8 @@ final class AppCoordinator {
     private var pipeline: TranscriptionPipeline?
     private var capsule: RecordingCapsuleController?
     private var statusItem: StatusItemController?
+    /// The right-click menu's "Rewrite as" submenu.
+    private lazy var rewriteMenu = RewriteMenu(settings: features.store(RewriteSettings.self))
     private lazy var settingsWindow = SettingsWindowController(coordinator: self)
     private lazy var firstRunWindow = HostedWindow(
         title: FirstRunView.windowTitle, freshContentOnReopen: true,
@@ -89,7 +91,8 @@ final class AppCoordinator {
         if Self.isUITesting {
             // No single-instance takeover: a copy the developer is running keeps running
             statusItem = StatusItemController(onOpen: { [unowned self] in showSettings() },
-                                              onSettings: { [unowned self] in showSettings() })
+                                              onSettings: { [unowned self] in showSettings() },
+                                              extraItems: [rewriteMenu.item])
             return
         }
         // Newest instance wins: quit any older copies before this one installs its event tap
@@ -109,7 +112,8 @@ final class AppCoordinator {
 
         statusItem = StatusItemController(
             onOpen: { [unowned self] in openFromMenuBar() },
-            onSettings: { [unowned self] in showSettings() }
+            onSettings: { [unowned self] in showSettings() },
+            extraItems: [rewriteMenu.item]
         )
         capsule = RecordingCapsuleController(appState: appState)
         permissionManager.checkAll()
@@ -146,6 +150,7 @@ final class AppCoordinator {
         withObservationTracking {
             _ = appState.status
             _ = appState.setupComplete
+            _ = appState.rewriteTemplate
         } onChange: { [weak self] in
             // onChange fires before the new value is set, so read it on the next main-actor turn
             Task { @MainActor in self?.observeState() }
@@ -154,7 +159,11 @@ final class AppCoordinator {
     }
 
     private func stateChanged() {
-        statusItem?.update(for: appState.status)
+        // A rewrite's label lasts while its hold or run does
+        if !appState.status.isBusy, appState.rewriteTemplate != nil { appState.rewriteTemplate = nil }
+        // The Control listener runs on its own thread and never reads AppState; it gets the busy state from here
+        hotkeyService.setPipelineBusy(appState.status.isBusy)
+        statusItem?.update(for: appState.status, rewriting: appState.rewriteTemplate != nil)
         capsule?.update(for: appState.status)
         if appState.setupComplete, pipeline == nil { startPipelineIfReady() }
     }
@@ -171,11 +180,14 @@ final class AppCoordinator {
             let p = TranscriptionPipeline(appState: appState, transcriptStore: transcriptStore,
                                           stages: .live(features))
             pipeline = p
-            hotkeyService.onRecordingStarted = { mode in p.startRecording(mode: mode) }
+            hotkeyService.onRecordingStarted = { [unowned self] mode in
+                p.startRecording(mode: mode)
+                if mode == .rewrite { showRewriteTemplate() }
+            }
+            hotkeyService.onRewriteHint = { [unowned self] in showRewriteTemplate() }
             hotkeyService.onRecordingEnded   = { mode in _ = p.stopRecordingAndProcess(mode: mode) }
             hotkeyService.onRecordingCancelled = { p.cancelRecording() }
-            let appState = appState
-            hotkeyService.setPipelineBusyCheck { appState.status.isBusy }
+            hotkeyService.setPipelineBusy(appState.status.isBusy)
             p.warmUp()
         }
 
@@ -190,6 +202,7 @@ final class AppCoordinator {
                     // Only the listener's own error is cleared; any other error stays for the user to read
                     if let listenerError, appState.lastError == listenerError { appState.clearError() }
                     listenerError = nil
+                    reportKeyPressCancel()
                 } catch {
                     reportListenerError("Honyaku couldn't listen for the Control key: \(error.localizedDescription) Quit and reopen Honyaku to try again.")
                 }
@@ -197,6 +210,28 @@ final class AppCoordinator {
             return
         }
         reportListenerError("Honyaku needs Accessibility to hear the Control key. Turn it on in System Settings → Privacy & Security → Accessibility, then click the menu bar icon.")
+    }
+
+    /// Names the template on the capsule as soon as a hold becomes a rewrite: the same choice the pipeline
+    /// makes when it ends, for the app the recording started in.
+    private func showRewriteTemplate() {
+        guard appState.status == .recording, let pipeline else { return }
+        appState.rewriteTemplate = features.store(RewriteSettings.self)
+            .resolvedTemplate(forAppAtStart: pipeline.recordingAppAtStart)
+    }
+
+    static let keyPressCancelUnavailableMessage =
+        "Pressing a key during a hold won't cancel it. Honyaku couldn't watch key presses."
+    private static let keyPressNoticeShownKey = "keyPressCancelNoticeShown"
+
+    /// When macOS gave the listener modifier keys only, the General tab says so for as long as it lasts, and
+    /// the notice is shown once.
+    private func reportKeyPressCancel() {
+        appState.keyPressCancelUnavailable = !hotkeyService.watchesKeyPresses
+        guard appState.keyPressCancelUnavailable, !features.defaults.bool(forKey: Self.keyPressNoticeShownKey),
+              !appState.status.isBusy else { return }
+        features.defaults.set(true, forKey: Self.keyPressNoticeShownKey)
+        appState.setError(Self.keyPressCancelUnavailableMessage)
     }
 
     private func reportListenerError(_ message: String) {

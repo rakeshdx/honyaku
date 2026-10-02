@@ -14,6 +14,8 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
     let appBundleID: String?
     /// Whether the text was pasted: false when it was saved to History only; nil for older entries.
     let pasted: Bool?
+    /// For a rewrite, the template's `RewriteTemplateID`; `rawText` then holds the spoken words.
+    let rewriteTemplateID: String?
 
     init(
         id: UUID = UUID(),
@@ -25,7 +27,8 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
         hasSpeakerLabels: Bool = false,
         mode: String? = nil,
         appBundleID: String? = nil,
-        pasted: Bool? = nil
+        pasted: Bool? = nil,
+        rewriteTemplateID: String? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -37,5 +40,6 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
         self.mode = mode
         self.appBundleID = appBundleID
         self.pasted = pasted
+        self.rewriteTemplateID = rewriteTemplateID
     }
 }

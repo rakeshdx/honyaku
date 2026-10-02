@@ -1,13 +1,16 @@
 import AppKit
 
-/// How a dictation's words are turned into text. Plain dictation keeps every word.
+/// How a dictation's words are turned into text. Plain dictation keeps every word; a rewrite (Control+Shift)
+/// turns them into a format such as a Jira ticket.
 enum DictationMode: Equatable, Sendable {
     case dictate
+    case rewrite
 
     /// Stored in history (`TranscriptEntry.mode`).
     var id: String {
         switch self {
         case .dictate: return "dictate"
+        case .rewrite: return "rewrite"
         }
     }
 }
@@ -113,6 +116,9 @@ struct DictationContext: Sendable {
     /// Every enabled vocabulary term, as written, for any engine and language. Formatting leaves these
     /// alone and cleanup must keep them (`speechHints.glossary` is only the Whisper hint).
     var vocabularyTerms: [String] = []
+
+    /// For a rewrite: the template and its prompt, chosen for `appAtStart` (see `RewriteStages`).
+    var rewrite: RewritePlan?
 
     init(mode: DictationMode = .dictate, appAtStart: TargetApp? = nil, firstRunTestSession: Int? = nil) {
         self.mode = mode

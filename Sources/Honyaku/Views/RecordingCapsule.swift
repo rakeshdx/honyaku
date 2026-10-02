@@ -152,6 +152,11 @@ struct RecordingCapsuleView: View {
             case .recording:
                 LevelMeter(level: appState.inputLevel)
                 ElapsedTime(since: appState.recordingStartedAt)
+                if let template = appState.rewriteTemplate {
+                    Text(RewriteCopy.recording(template))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             case .error(let message):
                 Text(message)
                     .font(.callout)
@@ -159,7 +164,7 @@ struct RecordingCapsuleView: View {
                     .lineLimit(1)
                     .frame(maxWidth: 280, alignment: .leading)
             default:
-                Text("Transcribing…")
+                Text(appState.rewriteTemplate.map(RewriteCopy.generating) ?? "Transcribing…")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

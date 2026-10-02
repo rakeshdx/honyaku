@@ -34,8 +34,16 @@ protocol AudioCapturing: AnyObject {
 
 protocol CleanupServiceProtocol: Sendable {
     func clean(_ rawText: String, request: CleanupRequest) async throws -> String
+    /// `clean`, also saying how generation ended: rewrites use it to spot output cut off at the cap.
+    func generate(_ rawText: String, request: CleanupRequest) async throws -> CleanupOutput
     /// Loads the selected model ahead of the first dictation.
     func prepare() async throws
+}
+
+extension CleanupServiceProtocol {
+    func generate(_ rawText: String, request: CleanupRequest) async throws -> CleanupOutput {
+        CleanupOutput(text: try await clean(rawText, request: request))
+    }
 }
 
 // MARK: - Diarization
@@ -52,6 +60,8 @@ protocol HotkeyServiceProtocol: AnyObject {
     /// The mode the gesture ended in, which wins over the one it started in.
     var onRecordingEnded: ((DictationMode) -> Void)? { get set }
     var onRecordingCancelled: (() -> Void)? { get set }
+    /// Shift joined a hold that started as dictation: it will end as a rewrite unless it's cancelled.
+    var onRewriteHint: (() -> Void)? { get set }
     func start() throws
     func stop()
 }
