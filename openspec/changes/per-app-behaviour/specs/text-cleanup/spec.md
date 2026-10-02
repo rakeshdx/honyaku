@@ -117,6 +117,11 @@ Each app SHALL use its own rules if the user gave it an override, otherwise its 
 - **WHEN** the transcript is "Sounds good, I'll ship it today."
 - **THEN** the text is pasted unchanged
 
+#### Scenario: Vocabulary terms keep their capital with any speech engine
+- **GIVEN** the vocabulary lists "Paramount+", Chat is set to lowercase the first letter, and the speech model is Parakeet (or Whisper with Japanese chosen)
+- **WHEN** the user dictates "Paramount+ ships today" into Slack
+- **THEN** "Paramount+ ships today" is pasted with its capital intact
+
 #### Scenario: A per-app override beats the category
 - **GIVEN** the user added Ghostty with "final full stop: keep" while Terminals drops it
 - **WHEN** the user dictates into Ghostty

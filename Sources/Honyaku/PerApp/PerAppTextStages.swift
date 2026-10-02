@@ -38,7 +38,9 @@ struct FormattingStage: TextStage {
             context.pasteAllowed = false
             context.pasteOffNotice = "Saved to History. \(Self.name(of: app, in: profiles)) is set not to paste"
         }
-        return rules.apply(to: text, protectedTerms: context.speechHints.glossary)
+        // Every enabled vocabulary term, whatever the speech engine or language (the Whisper hint is only
+        // filled for Whisper in English or Auto-detect)
+        return rules.apply(to: text, protectedTerms: context.vocabularyTerms)
     }
 
     static func name(of app: TargetApp?, in profiles: AppProfiles) -> String {

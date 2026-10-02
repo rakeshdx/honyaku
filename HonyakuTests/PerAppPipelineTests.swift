@@ -256,8 +256,10 @@ final class PerAppPipelineTests: XCTestCase {
         let services = PipelineServices(audioCapture: audio, transcription: transcription,
                                         diarization: FakeDiarization(), cleanup: cleanup, paste: paste,
                                         models: FakeModels(), targets: targets)
-        // RecordingPreparer puts "Paramount+" in the glossary, as the vocabulary feature will
-        let stages = PipelineStages.combined([PipelineStages(preparers: [RecordingPreparer()]),
+        // The real vocabulary stages, with a temporary list holding "Paramount+"
+        let environment = FeatureEnvironment(directory: directory, defaults: defaults)
+        _ = try? environment.store(VocabularyStore.self).add(term: "Paramount+")
+        let stages = PipelineStages.combined([VocabularyStages.make(environment),
                                               PerAppStages.make(store: profiles, probe: probe)])
         let pipeline = TranscriptionPipeline(appState: appState, transcriptStore: history, services: services,
                                              stages: stages, defaults: defaults)
@@ -269,6 +271,36 @@ final class PerAppPipelineTests: XCTestCase {
         await pipeline.stopRecordingAndProcess()?.value
 
         XCTAssertEqual(paste.pasted, ["Paramount+ ships today", "ships today"])
+    }
+
+    /// Parakeet, and Whisper with another language, fill no Whisper hint; vocabulary terms must still keep
+    /// their first letter under a lowercase rule.
+    func testVocabularyTermsKeepTheirFirstLetterWithAnyEngineAndLanguage() async throws {
+        var chat = profiles.profiles.rules(for: .chat)
+        chat.firstLetter = .lowercase
+        profiles.profiles.setRules(chat, for: .chat)
+        let environment = FeatureEnvironment(directory: directory, defaults: defaults)
+        _ = try environment.store(VocabularyStore.self).add(term: "Paramount+")
+        let services = PipelineServices(audioCapture: audio, transcription: transcription,
+                                        diarization: FakeDiarization(), cleanup: cleanup, paste: paste,
+                                        models: FakeModels(), targets: targets)
+        let stages = PipelineStages.combined([VocabularyStages.make(environment),
+                                              PerAppStages.make(store: profiles, probe: probe)])
+        let pipeline = TranscriptionPipeline(appState: appState, transcriptStore: history, services: services,
+                                             stages: stages, defaults: defaults)
+        cleanup.respond = { _ in "Paramount+ ships today" }
+
+        defaults.set("parakeet-tdt-v2", forKey: "selectedSpeechModelID")
+        pipeline.startRecording()
+        await pipeline.stopRecordingAndProcess()?.value
+
+        defaults.set("whisper-large-v3-turbo", forKey: "selectedSpeechModelID")
+        defaults.set("ja", forKey: TranscriptionService.dictationLanguageKey)
+        pipeline.startRecording()
+        await pipeline.stopRecordingAndProcess()?.value
+
+        XCTAssertEqual(transcription.hints.map(\.glossary), [[], []], "no Whisper hint in either case")
+        XCTAssertEqual(paste.pasted, ["Paramount+ ships today", "Paramount+ ships today"])
     }
 
     func testOlderHistoryEntriesStillDecode() throws {

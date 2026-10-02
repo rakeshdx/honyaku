@@ -37,7 +37,7 @@
 - [x] 6.3 `openspec validate per-app-behaviour --strict`
 ## 7. After custom-vocabulary merges
 
-- [ ] 7.1 After custom-vocabulary merges and this branch rebases: switch `FormattingStage` from `context.speechHints.glossary` to `context.vocabularyTerms` (every enabled term, any engine), and add a pipeline test with the real `VocabularyPreparer` (review blocker 3; the glossary is filled only for Whisper in English or Auto)
+- [x] 7.1 After custom-vocabulary merges and this branch rebases: switch `FormattingStage` from `context.speechHints.glossary` to `context.vocabularyTerms` (every enabled term, any engine), and add a pipeline test with the real `VocabularyPreparer` (review blocker 3; the glossary is filled only for Whisper in English or Auto)
 
 ## 8. Review fixes
 
