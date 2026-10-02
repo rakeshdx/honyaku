@@ -101,6 +101,14 @@ final class TranscriptionPipeline {
         }
         let transcription = transcription
         let cleanup = cleanup
+        // An older install may lack the cleanup model's chat template; fetch just that file, then load
+        // the model so the next dictation doesn't wait for it
+        if let cleanupModel = ModelRegistry.model(id: appState.selectedCleanupModelID) {
+            models.repairChatTemplateIfNeeded(cleanupModel) { [appState] in
+                guard appState.cleanupEnabled else { return }
+                Task { try? await cleanup.prepare() }
+            }
+        }
         Task {
             try? await transcription.prepareIfDownloaded(modelID: modelID)
             if cleanupEnabled { try? await cleanup.prepare() }
@@ -320,6 +328,7 @@ final class TranscriptionPipeline {
         if let cleanupModel, !models.isInstalled(cleanupModel) {
             // Paste the speaker's words now; cleanup resumes once its model is downloaded
             models.startDownload(cleanupModel)
+            context.notices.append(models.cleanupSkippedNotice(for: cleanupModel))
             return text
         }
         let request = CleanupRequest(

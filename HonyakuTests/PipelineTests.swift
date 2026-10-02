@@ -60,6 +60,8 @@ final class FakeCleanup: CleanupServiceProtocol, @unchecked Sendable {
     var respond: ((String) -> String)? = { $0 }
     private(set) var inputs: [String] = []
     private(set) var requests: [CleanupRequest] = []
+    /// Called on every `prepare()`, from whatever task loads the model.
+    var onPrepare: (@Sendable () -> Void)?
 
     func clean(_ rawText: String, request: CleanupRequest) async throws -> String {
         inputs.append(rawText)
@@ -68,7 +70,7 @@ final class FakeCleanup: CleanupServiceProtocol, @unchecked Sendable {
         return respond(rawText)
     }
 
-    func prepare() async throws {}
+    func prepare() async throws { onPrepare?() }
 }
 
 /// Never touches a real pasteboard. A clear can be held open, like the real 5-second wait.
@@ -116,6 +118,13 @@ final class FakeModels: ModelAvailability {
     func isInstalled(_ model: ModelInfo) -> Bool { !missing.contains(model.id) }
     func startDownload(_ model: ModelInfo) { downloads.append(model.id) }
     func downloadMessage(for model: ModelInfo) -> String { "Downloading \(model.id)" }
+
+    private(set) var repairs: [String] = []
+    private(set) var onRepaired: [@MainActor () -> Void] = []
+    func repairChatTemplateIfNeeded(_ model: ModelInfo, onRepaired: @escaping @MainActor () -> Void) {
+        repairs.append(model.id)
+        self.onRepaired.append(onRepaired)
+    }
 }
 
 @MainActor
@@ -329,6 +338,22 @@ final class PipelineTests: XCTestCase {
         XCTAssertEqual(models.downloads, [appState.selectedCleanupModelID])
         XCTAssertTrue(cleanup.inputs.isEmpty)
         XCTAssertEqual(paste.pasted, ["hello world"])
+        // The user is told why the words weren't cleaned up
+        let name = ModelRegistry.model(id: appState.selectedCleanupModelID)!.displayName
+        XCTAssertEqual(appState.lastError, "Cleanup is off until \(name) finishes downloading.")
+    }
+
+    func testWarmUpRepairsTheCleanupModelThenLoadsIt() async {
+        appState.cleanupEnabled = true
+        let prepared = expectation(description: "cleanup loaded at launch and again after the repair")
+        prepared.expectedFulfillmentCount = 2
+        cleanup.onPrepare = { prepared.fulfill() }
+        let pipeline = makePipeline()
+
+        pipeline.warmUp()
+        XCTAssertEqual(models.repairs, [appState.selectedCleanupModelID])
+        models.onRepaired.forEach { $0() }  // the template arrived
+        await fulfillment(of: [prepared], timeout: 2)
     }
 
     func testMissingSpeechModelDownloadsAndReports() async {

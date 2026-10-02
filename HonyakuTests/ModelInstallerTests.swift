@@ -44,6 +44,7 @@ final class ModelInstallerTests: XCTestCase {
         try write("model-00001-of-00002.safetensors")
         try write("model-00002-of-00002.safetensors")
         try writeIndex(["a": "model-00001-of-00002.safetensors", "b": "model-00002-of-00002.safetensors"])
+        try writeTokenizerConfig(chatTemplate: "{{ messages }}")
         XCTAssertTrue(ModelInstaller.isMLXComplete(at: root))
     }
 
@@ -58,6 +59,7 @@ final class ModelInstallerTests: XCTestCase {
     func testSingleFileMLXModel() throws {
         try write("config.json")
         try write("tokenizer.json")
+        try writeTokenizerConfig(chatTemplate: "{{ messages }}")
         XCTAssertFalse(ModelInstaller.isMLXComplete(at: root))
         try write("model.safetensors")
         XCTAssertTrue(ModelInstaller.isMLXComplete(at: root))
@@ -67,6 +69,57 @@ final class ModelInstallerTests: XCTestCase {
         try write("config.json")
         try write("model.safetensors")
         XCTAssertFalse(ModelInstaller.isMLXComplete(at: root), "A download interrupted before the tokenizer can't load")
+    }
+
+    // MARK: MLX chat template
+
+    func testMLXWithoutChatTemplateIsNotInstalled() throws {
+        try makeMLXWeights()
+        try writeTokenizerConfig(chatTemplate: nil)
+        XCTAssertFalse(ModelInstaller.isMLXComplete(at: root), "Without a template the prompt falls back to plain text")
+        XCTAssertTrue(ModelInstaller.needsChatTemplateOnly(at: root))
+    }
+
+    func testChatTemplateInTokenizerConfigCounts() throws {
+        // Qwen3-1.7B keeps its template inside tokenizer_config.json
+        try makeMLXWeights()
+        try writeTokenizerConfig(chatTemplate: "{%- for message in messages %}{{ message.content }}{%- endfor %}")
+        XCTAssertTrue(ModelInstaller.isMLXComplete(at: root))
+        XCTAssertFalse(ModelInstaller.needsChatTemplateOnly(at: root))
+    }
+
+    func testChatTemplateJinjaFileCounts() throws {
+        // Qwen3-4B-Instruct-2507 keeps it in a separate chat_template.jinja
+        try makeMLXWeights()
+        try writeTokenizerConfig(chatTemplate: nil)
+        try write("chat_template.jinja")
+        XCTAssertTrue(ModelInstaller.isMLXComplete(at: root))
+    }
+
+    func testChatTemplateJSONFileCounts() throws {
+        try makeMLXWeights()
+        try write("chat_template.json")
+        XCTAssertTrue(ModelInstaller.hasChatTemplate(at: root))
+    }
+
+    func testEmptyTemplatesDontCount() throws {
+        try makeMLXWeights()
+        try writeTokenizerConfig(chatTemplate: "")
+        try Data().write(to: root.appending(path: "chat_template.jinja"))
+        XCTAssertFalse(ModelInstaller.hasChatTemplate(at: root), "An empty entry or an empty file is no template")
+    }
+
+    func testNamedTemplatesCount() throws {
+        try makeMLXWeights()
+        let config: [String: Any] = ["chat_template": [["name": "default", "template": "{{ messages }}"]]]
+        try JSONSerialization.data(withJSONObject: config).write(to: root.appending(path: "tokenizer_config.json"))
+        XCTAssertTrue(ModelInstaller.hasChatTemplate(at: root))
+    }
+
+    func testMissingWeightsIsNotATemplateOnlyRepair() throws {
+        try write("config.json")
+        try write("tokenizer.json")
+        XCTAssertFalse(ModelInstaller.needsChatTemplateOnly(at: root), "A model without weights needs a full download")
     }
 
     // MARK: Single-flight and delete safety
@@ -154,6 +207,19 @@ final class ModelInstallerTests: XCTestCase {
         let url = root.appending(path: relativePath)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data("x".utf8).write(to: url)
+    }
+
+    private func makeMLXWeights() throws {
+        try write("config.json")
+        try write("tokenizer.json")
+        try write("model.safetensors")
+    }
+
+    /// A `tokenizer_config.json`, with a `chat_template` entry only when one is given.
+    private func writeTokenizerConfig(chatTemplate: String?) throws {
+        var config: [String: Any] = ["tokenizer_class": "Qwen2Tokenizer"]
+        if let chatTemplate { config["chat_template"] = chatTemplate }
+        try JSONSerialization.data(withJSONObject: config).write(to: root.appending(path: "tokenizer_config.json"))
     }
 
     private func writeIndex(_ weightMap: [String: String]) throws {

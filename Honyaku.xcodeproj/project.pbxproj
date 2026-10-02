@@ -77,6 +77,7 @@
 		BD43B0FC4EE133C04D251A41 /* FirstRunView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C14FC1542A9A2E3C86940C94 /* FirstRunView.swift */; };
 		C0807D9374799C799801395B /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3BBB06B7A63BB516494FEB9C /* Theme.swift */; };
 		C27CDFE0A9EFE69005A57C17 /* WhisperKitEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = F904936BE94770CAC188DDAF /* WhisperKitEngine.swift */; };
+		C40A78E1E3158007D5BC92C9 /* ChatTemplateIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBCDBBD858F4ECBCCB927C86 /* ChatTemplateIntegrationTests.swift */; };
 		C40E993167FE70BE8EB505E3 /* ParakeetEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4A33B4A9D2DD23505B6F6B16 /* ParakeetEngineTests.swift */; };
 		C4B03090482F90CE71706C2C /* VocabularyPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9C784A80A8613E71032B823 /* VocabularyPipelineTests.swift */; };
 		C6B4D5352FC6E6F359C9E01D /* CleanupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69AD0AFFCE09D97153A57908 /* CleanupService.swift */; };
@@ -86,6 +87,7 @@
 		CDF5F150CA4C5BF24F1CAB78 /* VocabularyStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B27BEEA0193C84AF4DD2AB /* VocabularyStoreTests.swift */; };
 		D03B8F7F5771ADBF32DAE2FB /* AppsSettingsUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15F4FE406989981BBB733A94 /* AppsSettingsUITests.swift */; };
 		D1FE8F7956E20A790010F1FC /* ModelBenchmarkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BFB58638D97937C8433243F /* ModelBenchmarkTests.swift */; };
+		D4CC6CCDAE9460A94FE10C37 /* ModelDownloadsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38B927A30D3AC8EC054BB965 /* ModelDownloadsTests.swift */; };
 		D6AAC2272D7FD199FB76E31A /* TranscriptStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5037D1267461BD4C8CB3133A /* TranscriptStore.swift */; };
 		DA2387ED0031DAD6E709D402 /* DiarizationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F7164FEEB539FA3D90612E4 /* DiarizationService.swift */; };
 		DB70FE3E86A52E2EB49EDEFF /* ModelDownloader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 098B82AAFBDAFCBF79C63CAF /* ModelDownloader.swift */; };
@@ -156,6 +158,7 @@
 		38488E782725D0616D41E92E /* ModelRegistry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelRegistry.swift; sourceTree = "<group>"; };
 		386C38E97B753D1A13208D47 /* PerAppPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerAppPipelineTests.swift; sourceTree = "<group>"; };
 		38A2F1BE09E0FE0A9DDAF292 /* SpeechEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechEngine.swift; sourceTree = "<group>"; };
+		38B927A30D3AC8EC054BB965 /* ModelDownloadsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelDownloadsTests.swift; sourceTree = "<group>"; };
 		3BA6F586FB7058EAF724090F /* AppIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIdentity.swift; sourceTree = "<group>"; };
 		3BBB06B7A63BB516494FEB9C /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		3CABA4C3A063A82110592849 /* ModelInstaller.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelInstaller.swift; sourceTree = "<group>"; };
@@ -234,6 +237,7 @@
 		F713142AB2DBA99DE3D164CD /* AppCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppCoordinator.swift; sourceTree = "<group>"; };
 		F904936BE94770CAC188DDAF /* WhisperKitEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WhisperKitEngine.swift; sourceTree = "<group>"; };
 		F9C784A80A8613E71032B823 /* VocabularyPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VocabularyPipelineTests.swift; sourceTree = "<group>"; };
+		FBCDBBD858F4ECBCCB927C86 /* ChatTemplateIntegrationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTemplateIntegrationTests.swift; sourceTree = "<group>"; };
 		FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyServiceTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -290,6 +294,7 @@
 				FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */,
 				DFF9B8EA7D4E1749EF3C27D9 /* Info.plist */,
 				7CB3FF8431F439F227B38078 /* ModelDownloaderTests.swift */,
+				38B927A30D3AC8EC054BB965 /* ModelDownloadsTests.swift */,
 				6108744515D3360F23E149A8 /* ModelInstallerTests.swift */,
 				A9EB9167EE7B4F27259A9091 /* ModelRegistryTests.swift */,
 				4A33B4A9D2DD23505B6F6B16 /* ParakeetEngineTests.swift */,
@@ -342,6 +347,7 @@
 		4EFC83CD2981BB040A406BA3 /* HonyakuIntegrationTests */ = {
 			isa = PBXGroup;
 			children = (
+				FBCDBBD858F4ECBCCB927C86 /* ChatTemplateIntegrationTests.swift */,
 				DB5C27B9752C3DB5955E093D /* CleanupIntegrationTests.swift */,
 				C6EE13AC04B231794090E185 /* DiarizationIntegrationTests.swift */,
 				A66A4EA2D911AA4D16799AC2 /* Info.plist */,
@@ -659,6 +665,7 @@
 				EBBFA2B98599578125EBA107 /* FormattingRulesTests.swift in Sources */,
 				AC9775274A6F0D13F165A308 /* HotkeyServiceTests.swift in Sources */,
 				8006DBB6F5331A8B3C7BBB53 /* ModelDownloaderTests.swift in Sources */,
+				D4CC6CCDAE9460A94FE10C37 /* ModelDownloadsTests.swift in Sources */,
 				4E3C8FB2A88E897CEF3B1DB9 /* ModelInstallerTests.swift in Sources */,
 				B6E88A54F8E8D4C3DCF3077B /* ModelRegistryTests.swift in Sources */,
 				C40E993167FE70BE8EB505E3 /* ParakeetEngineTests.swift in Sources */,
@@ -687,6 +694,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C40A78E1E3158007D5BC92C9 /* ChatTemplateIntegrationTests.swift in Sources */,
 				2FF14EA119D7B90ACA24C5A8 /* CleanupIntegrationTests.swift in Sources */,
 				B3B5D2A8A966A589DF707322 /* DiarizationIntegrationTests.swift in Sources */,
 				29331628FB46AFE38CB50ED0 /* IntegrationTestBase.swift in Sources */,

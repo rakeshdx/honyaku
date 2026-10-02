@@ -110,6 +110,11 @@ actor ModelInstaller {
             try await ModelDownloader().download(model: model, progress: progress)
         }
         guard ModelInstaller.isInstalled(model) else {
+            // The repo gave us the weights but no template anywhere: no retry will fix that
+            if model.engine == .mlx, needsChatTemplateOnly(at: ModelStore.shared.modelDirectory(for: model)) {
+                ModelInstaller.log.error("Model \(model.id, privacy: .public) has no chat template")
+                throw ModelDownloadError.noChatTemplate(model.displayName)
+            }
             ModelInstaller.log.error("Model \(model.id, privacy: .public) incomplete after install")
             throw ModelDownloadError.fileSystemError(CocoaError(.fileReadCorruptFile))
         }
@@ -175,9 +180,39 @@ actor ModelInstaller {
         return !containsPartialFiles(folder)
     }
 
-    /// An MLX model is whole when `config.json` and `tokenizer.json` exist and every weight shard the index
-    /// names is present.
+    /// An MLX model is whole when its weights load (see `hasMLXWeights`) and it has a chat template. Without
+    /// one the prompt falls back to plain text, so the model never counts as installed (and never loads)
+    /// until the template is there.
     nonisolated static func isMLXComplete(at folder: URL) -> Bool {
+        hasMLXWeights(at: folder) && hasChatTemplate(at: folder)
+    }
+
+    /// The weights, config and tokenizer are all there and only the chat template is missing: a repair
+    /// fetches that one small file.
+    nonisolated static func needsChatTemplateOnly(at folder: URL) -> Bool {
+        hasMLXWeights(at: folder) && !hasChatTemplate(at: folder)
+    }
+
+    /// A chat template in `tokenizer_config.json`, or as `chat_template.jinja` / `chat_template.json`, the
+    /// places swift-transformers looks.
+    nonisolated static func hasChatTemplate(at folder: URL) -> Bool {
+        let fm = FileManager.default
+        if ["chat_template.jinja", "chat_template.json"].contains(where: { name in
+            let size = (try? folder.appending(path: name).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            return size > 0
+        }) { return true }
+        let config = folder.appending(path: "tokenizer_config.json")
+        guard fm.fileExists(atPath: config.path), let data = try? Data(contentsOf: config),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+        switch json["chat_template"] {
+        case let template as String: return !template.isEmpty
+        case let templates as [Any]: return !templates.isEmpty  // named templates
+        default: return false
+        }
+    }
+
+    /// `config.json` and `tokenizer.json` exist and every weight shard the index names is present.
+    nonisolated static func hasMLXWeights(at folder: URL) -> Bool {
         let fm = FileManager.default
         guard ["config.json", "tokenizer.json"].allSatisfy({ fm.fileExists(atPath: folder.appending(path: $0).path) })
         else { return false }
