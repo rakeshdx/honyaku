@@ -60,3 +60,9 @@
 - [x] 7.13 Tests remove their temporary folders
 - [x] 7.14 Gates: `xcodegen generate`, clean build with no project warnings, unit tests (256), UI tests (6), rewrite integration tests (2, Qwen3-4B), `openspec validate rewrite-modes --strict`; history.json and the models folder untouched
 
+
+## 8. Merge with custom-vocabulary and per-app-behaviour
+
+- [x] 8.1 Rebase onto main after custom-vocabulary and per-app-behaviour merged: tabs `general, models, dictation, vocabulary, rewrite, apps, history, privacy`; `TranscriptEntry` keeps `pasted` and `rewriteTemplateID`; `CleanupRequest` keeps `protectedTerms` with the rewrite's label and speaker rule; `DictationContext` keeps `vocabularyTerms` and `rewrite`; final stages run `TerminalOneLine`, then Per-app's formatting and password guard
+- [x] 8.2 Tests across the merged features (`MergedFeaturesTests`): the 8-tab order; a rewrite into a terminal through the real per-app rules (one line, straight quotes, no final full stop, no trailing newline), also with the terminal's line breaks set to keep; the password guard still blocks a rewrite; a vocabulary correction reaches the rewrite and its keep-these-terms rule is in the rewrite prompt
+- [ ] 8.3 Rebase onto main after fix-qwen-chat-template merges (CleanupService, TranscriptionPipeline, ServiceProtocols)

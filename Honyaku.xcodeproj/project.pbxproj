@@ -62,6 +62,7 @@
 		84CDD4F7DE25C1A7D0F8AF76 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 6ABAFD44C29F179B8B2E55E8 /* WhisperKit */; };
 		8AAA753408CBB1B1DAF30149 /* VocabularyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3780115957B0F4F24EF7E9D /* VocabularyUITests.swift */; };
 		8BBA88CB3A3B2DCCF2709B97 /* PerAppPipelineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 386C38E97B753D1A13208D47 /* PerAppPipelineTests.swift */; };
+		8BE2F38D0644CF02D2C3E9D0 /* MergedFeaturesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E56184B86C1977503DB6F602 /* MergedFeaturesTests.swift */; };
 		8DD7513BF6CC4DFC54DFA4EC /* ModelInfo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FADEBDEBEF5B31404040B2 /* ModelInfo.swift */; };
 		8FD08101AC880370D53603E5 /* ModelRegistry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38488E782725D0616D41E92E /* ModelRegistry.swift */; };
 		90224F430A7285766CAB031E /* PipelineOrderingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FF1407837A235C2A6CC930D /* PipelineOrderingTests.swift */; };
@@ -240,6 +241,7 @@
 		DDA067C20FE9293DD214CB65 /* KeycapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeycapView.swift; sourceTree = "<group>"; };
 		DFF9B8EA7D4E1749EF3C27D9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		E55E8F9A4BA205025B2D191C /* IntegrationTestBase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntegrationTestBase.swift; sourceTree = "<group>"; };
+		E56184B86C1977503DB6F602 /* MergedFeaturesTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MergedFeaturesTests.swift; sourceTree = "<group>"; };
 		E8BB9ECC822E8BF55CFF05EF /* TranscriptionPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionPipeline.swift; sourceTree = "<group>"; };
 		F0C1C41D77BF1178238E6FB1 /* Honyaku.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Honyaku.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F0C9096444D42859276843E9 /* AppStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStatus.swift; sourceTree = "<group>"; };
@@ -319,6 +321,7 @@
 				9B2108085AFA6442B1113356 /* FormattingRulesTests.swift */,
 				FCC8E65EBA78614DF07616A1 /* HotkeyServiceTests.swift */,
 				DFF9B8EA7D4E1749EF3C27D9 /* Info.plist */,
+				E56184B86C1977503DB6F602 /* MergedFeaturesTests.swift */,
 				7CB3FF8431F439F227B38078 /* ModelDownloaderTests.swift */,
 				38B927A30D3AC8EC054BB965 /* ModelDownloadsTests.swift */,
 				6108744515D3360F23E149A8 /* ModelInstallerTests.swift */,
@@ -693,6 +696,7 @@
 				FB00A9AC44CC2FAF8276AA04 /* DictationContextTests.swift in Sources */,
 				EBBFA2B98599578125EBA107 /* FormattingRulesTests.swift in Sources */,
 				AC9775274A6F0D13F165A308 /* HotkeyServiceTests.swift in Sources */,
+				8BE2F38D0644CF02D2C3E9D0 /* MergedFeaturesTests.swift in Sources */,
 				8006DBB6F5331A8B3C7BBB53 /* ModelDownloaderTests.swift in Sources */,
 				D4CC6CCDAE9460A94FE10C37 /* ModelDownloadsTests.swift in Sources */,
 				4E3C8FB2A88E897CEF3B1DB9 /* ModelInstallerTests.swift in Sources */,
