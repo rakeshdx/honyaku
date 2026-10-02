@@ -297,7 +297,8 @@ final class TranscriptionPipeline {
             hasSpeakerLabels: !segments.isEmpty,
             mode: context.mode.id,
             // Honyaku isn't where the text went when its own window was in front
-            appBundleID: context.honyakuIsFrontmost ? nil : context.appAtPaste?.bundleID
+            appBundleID: context.honyakuIsFrontmost ? nil : context.appAtPaste?.bundleID,
+            pasted: destination == .paste
         )
         transcriptStore.save(entry)
         showNotices([routingNotice].compactMap { $0 } + context.notices)

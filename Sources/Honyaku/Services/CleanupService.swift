@@ -279,11 +279,17 @@ actor CleanupService: CleanupServiceProtocol {
     }
 
     /// Fallback text: the raw transcript minus fillers that are never content ("uh-huh" stays intact).
+    /// Spacing and punctuation are tidied only where a filler was removed, so a standalone "." elsewhere
+    /// ("git add .") stays standalone.
     static func removeUnambiguousFillers(_ text: String) -> String {
-        text.replacingOccurrences(of: "(?i)(?<![\\w'’-])(\(unambiguousFillers))(?![\\w'’-]),?", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: #"\s{2,}"#, with: " ", options: .regularExpression)
-            .replacingOccurrences(of: #"\s+([,.!?])"#, with: "$1", options: .regularExpression)
-            .replacingOccurrences(of: #"^[\s,.;:]+"#, with: "", options: .regularExpression)
+        let gap = "\u{E000}"  // private-use marker for "a filler was here"
+        return text.replacingOccurrences(of: gap, with: "")
+            .replacingOccurrences(of: "(?i)(?<![\\w'’-])(\(unambiguousFillers))(?![\\w'’-]),?", with: gap, options: .regularExpression)
+            // Fillers at the start take their trailing punctuation with them ("Um. So we go")
+            .replacingOccurrences(of: "^[\\s,.;:]*\(gap)[\\s,.;:\(gap)]*", with: "", options: .regularExpression)
+            // A filler right before punctuation: the punctuation moves up to the previous word ("it uh.")
+            .replacingOccurrences(of: "\\s*\(gap)[\\s\(gap)]*([,.!?])", with: "$1", options: .regularExpression)
+            .replacingOccurrences(of: "\\s*\(gap)[\\s\(gap)]*", with: " ", options: .regularExpression)
             .trimmingCharacters(in: .whitespaces)
     }
 

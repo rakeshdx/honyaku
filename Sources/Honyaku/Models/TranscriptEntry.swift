@@ -12,6 +12,8 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
     let mode: String?
     /// The app in front when the text was pasted or saved; nil for older entries.
     let appBundleID: String?
+    /// Whether the text was pasted: false when it was saved to History only; nil for older entries.
+    let pasted: Bool?
 
     init(
         id: UUID = UUID(),
@@ -22,7 +24,8 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
         durationSeconds: Double,
         hasSpeakerLabels: Bool = false,
         mode: String? = nil,
-        appBundleID: String? = nil
+        appBundleID: String? = nil,
+        pasted: Bool? = nil
     ) {
         self.id = id
         self.rawText = rawText
@@ -33,5 +36,6 @@ struct TranscriptEntry: Codable, Identifiable, Equatable {
         self.hasSpeakerLabels = hasSpeakerLabels
         self.mode = mode
         self.appBundleID = appBundleID
+        self.pasted = pasted
     }
 }
