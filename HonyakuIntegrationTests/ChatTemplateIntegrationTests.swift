@@ -67,10 +67,21 @@ final class ChatTemplateIntegrationTests: IntegrationTestBase {
         }
     }
 
-    private func contents(of folder: URL) throws -> [String: Int] {
+    /// Size, inode and modification date of each file: a write through a hard link would change the
+    /// date, and a replaced file would change the inode, even when the size stays the same.
+    private struct FileStamp: Equatable {
+        let size: Int
+        let inode: Int
+        let modified: Date?
+    }
+
+    private func contents(of folder: URL) throws -> [String: FileStamp] {
         let fm = FileManager.default
         return try fm.contentsOfDirectory(atPath: folder.path).reduce(into: [:]) { result, name in
-            result[name] = (try? folder.appending(path: name).resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? -1
+            let attributes = (try? fm.attributesOfItem(atPath: folder.appending(path: name).path)) ?? [:]
+            result[name] = FileStamp(size: (attributes[.size] as? NSNumber)?.intValue ?? -1,
+                                     inode: (attributes[.systemFileNumber] as? NSNumber)?.intValue ?? -1,
+                                     modified: attributes[.modificationDate] as? Date)
         }
     }
 }

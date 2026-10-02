@@ -29,3 +29,15 @@
 - [x] 6.1 `ModelDownloaderTests` download into a per-test temporary folder (`download(model:to:)`), never the user's models folder; the success test also checks the downloaded file
 - [x] 6.2 Audit: no other unit or UI test writes to the models folder (installer tests inject the install step; the others already use temporary folders); integration tests only read it
 - [x] 6.3 Gates: clean build with no warnings in project sources; 198 unit tests with the models folder's `_test_` count (150) and `history.json` unchanged before and after; 4 UI tests; `openspec validate --strict`
+
+## 7. Review fixes
+
+- [x] 7.1 Spec: scenarios for error responses, unsafe names, a repo without a template, the skipped-cleanup notice and the warm-up after a repair; design Decision 7
+- [x] 7.2 `downloadFile` and the repo listing require a 2xx `HTTPURLResponse`; mock tests: 404 and 500 leave no file, and a later attempt fetches it
+- [x] 7.3 File names filtered through `ModelInstaller.isSafePathPart`; tests with `../x.json` and `a/../../b.jinja`
+- [x] 7.4 `ModelDownloadError.noChatTemplate`; `ModelDownloads` shows its message once per launch and doesn't retry; test
+- [x] 7.5 `llmStage` adds "Cleanup is off until <Model> finishes downloading." when cleanup is skipped for a missing model; test
+- [x] 7.6 `repairChatTemplateIfNeeded(_:onRepaired:)`; `warmUp()` prepares cleanup after a repair; tests: `warmUp` asks for the repair (fake), `ModelDownloads` repairs a temporary folder and calls back
+- [x] 7.7 Integration test's "real folder unchanged" check compares inode and modification date as well as size
+- [x] 7.8 Gates: clean build with no warnings in project sources; 206 unit tests with `history.json` and the `_test_` count (165) unchanged; the chat-template integration test (the real 4B folder unchanged); `openspec validate --strict`; 4 UI tests pass (rerun after quitting the user's running Honyaku, which freed a menu bar slot)
+

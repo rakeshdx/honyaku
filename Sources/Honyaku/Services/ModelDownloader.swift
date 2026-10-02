@@ -6,6 +6,8 @@ enum ModelDownloadError: Error, LocalizedError {
     case insufficientDiskSpace(needed: Int64, available: Int64)
     case downloadFailed(URLError)
     case fileSystemError(Error)
+    /// The repo has the weights but no chat template; the associated value is the model's display name
+    case noChatTemplate(String)
 
     var errorDescription: String? {
         switch self {
@@ -14,6 +16,8 @@ enum ModelDownloadError: Error, LocalizedError {
             return "Need \(needed / 1_000_000) MB but only \(available / 1_000_000) MB available."
         case .downloadFailed(let e): return "Download failed: \(e.localizedDescription)"
         case .fileSystemError(let e): return e.localizedDescription
+        case .noChatTemplate(let name):
+            return "\(name) has no chat template, so Honyaku can't use it for cleanup. Choose another model in Settings > Models."
         }
     }
 }
@@ -70,7 +74,7 @@ actor ModelDownloader: ModelDownloading {
         } else {
             listed = model.fileNames
         }
-        let fileNames = Self.missingFiles(listed, in: targetDir)
+        let fileNames = Self.missingFiles(Self.safeFileNames(listed), in: targetDir)
 
         let baseURLString = "https://huggingface.co/\(model.hfRepoPath)/resolve/main"
 
@@ -115,7 +119,8 @@ actor ModelDownloader: ModelDownloading {
         request.setValue("Honyaku/1.0", forHTTPHeaderField: "User-Agent")
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
 
-        let (data, _) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        guard Self.isSuccess(response) else { throw ModelDownloadError.downloadFailed(URLError(.badServerResponse)) }
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let siblings = json["siblings"] as? [[String: Any]] else {
             throw ModelDownloadError.downloadFailed(URLError(.badServerResponse))
@@ -132,6 +137,18 @@ actor ModelDownloader: ModelDownloading {
             guard name.contains("."), let ext = name.split(separator: ".").last.map(String.init) else { return false }
             return allowed.contains(ext)
         }
+    }
+
+    /// Only names that stay inside the model's folder: relative, with no empty, "." or ".." component.
+    nonisolated static func safeFileNames(_ fileNames: [String]) -> [String] {
+        fileNames.filter(ModelInstaller.isSafePathPart)
+    }
+
+    /// A body is only a file when the server sent it successfully: an error page saved in place would
+    /// look like a finished download and never be fetched again.
+    nonisolated static func isSuccess(_ response: URLResponse?) -> Bool {
+        guard let http = response as? HTTPURLResponse else { return false }
+        return (200..<300).contains(http.statusCode)
     }
 
     /// `fileNames` minus those already in `folder` (present and not empty).
@@ -152,7 +169,8 @@ actor ModelDownloader: ModelDownloading {
                     continuation.resume(throwing: ModelDownloadError.downloadFailed(error))
                     return
                 }
-                guard let tempURL else {
+                guard let tempURL, Self.isSuccess(response) else {
+                    // URLSession deletes the temporary file; nothing is moved into place
                     continuation.resume(throwing: ModelDownloadError.downloadFailed(URLError(.badServerResponse)))
                     return
                 }

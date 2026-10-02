@@ -110,6 +110,11 @@ actor ModelInstaller {
             try await ModelDownloader().download(model: model, progress: progress)
         }
         guard ModelInstaller.isInstalled(model) else {
+            // The repo gave us the weights but no template anywhere: no retry will fix that
+            if model.engine == .mlx, needsChatTemplateOnly(at: ModelStore.shared.modelDirectory(for: model)) {
+                ModelInstaller.log.error("Model \(model.id, privacy: .public) has no chat template")
+                throw ModelDownloadError.noChatTemplate(model.displayName)
+            }
             ModelInstaller.log.error("Model \(model.id, privacy: .public) incomplete after install")
             throw ModelDownloadError.fileSystemError(CocoaError(.fileReadCorruptFile))
         }

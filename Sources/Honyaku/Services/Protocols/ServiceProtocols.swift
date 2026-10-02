@@ -75,11 +75,17 @@ protocol ModelAvailability {
     /// "Downloading …, 42%. Dictation works once it finishes."
     func downloadMessage(for model: ModelInfo) -> String
     /// Fetches a cleanup model's missing chat template in the background, when that's all it's missing.
-    func repairChatTemplateIfNeeded(_ model: ModelInfo)
+    /// `onRepaired` runs on the main actor once the template is in place.
+    func repairChatTemplateIfNeeded(_ model: ModelInfo, onRepaired: @escaping @MainActor () -> Void)
+    /// Why a dictation's cleanup was skipped because `model` isn't installed yet.
+    func cleanupSkippedNotice(for model: ModelInfo) -> String
 }
 
 extension ModelAvailability {
-    func repairChatTemplateIfNeeded(_ model: ModelInfo) {}
+    func repairChatTemplateIfNeeded(_ model: ModelInfo, onRepaired: @escaping @MainActor () -> Void) {}
+    func cleanupSkippedNotice(for model: ModelInfo) -> String {
+        "Cleanup is off until \(model.displayName) finishes downloading."
+    }
 }
 
 // MARK: - Single instance

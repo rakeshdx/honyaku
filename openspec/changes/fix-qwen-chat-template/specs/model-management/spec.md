@@ -7,7 +7,13 @@ The installer SHALL download a repo's chat template files along with its other f
 
 At launch, if the selected cleanup model is missing only its chat template, the system SHALL fetch just that file in the background and show its progress the same way as other background model downloads. It SHALL NOT download the weights again.
 
-The system SHALL NOT run cleanup or rewrites with a model that has no chat template. Until the template is present, cleanup SHALL be skipped and the speaker's words pasted (with English fillers removed), as for a cleanup model that is still downloading.
+The system SHALL NOT run cleanup or rewrites with a model that has no chat template. Until the template is present, cleanup SHALL be skipped and the speaker's words pasted (with English fillers removed), as for a cleanup model that is still downloading. A dictation whose cleanup is skipped because its model is still downloading SHALL say so: "Cleanup is off until <Model> finishes downloading."
+
+A model file SHALL be saved only from a successful (2xx) HTTP response. An error response (for example 404, 429 or 5xx) SHALL fail that download and leave no file behind, so a later attempt fetches it again. The installer SHALL download only files whose names are relative paths inside the model's folder: a name that is absolute or contains an empty, `.` or `..` component SHALL be skipped.
+
+If a cleanup model's repo provides no chat template at all, the system SHALL tell the user once per launch: "<Model> has no chat template, so Honyaku can't use it for cleanup. Choose another model in Settings > Models." It SHALL NOT retry the download for that model again during the same launch.
+
+After a launch repair succeeds, the system SHALL load the cleanup model in the background (when cleanup is on), as the launch warm-up does, so the next dictation doesn't pay the load time.
 
 #### Scenario: Fresh install of Qwen3-4B
 - **GIVEN** the repo keeps its chat template in `chat_template.jinja`
@@ -33,3 +39,29 @@ The system SHALL NOT run cleanup or rewrites with a model that has no chat templ
 - **GIVEN** Qwen3-1.7B's `tokenizer_config.json` contains a `chat_template` entry and there is no separate template file
 - **WHEN** the app checks whether the model is installed
 - **THEN** it counts as installed
+
+#### Scenario: The server returns an error page for the template
+- **GIVEN** Hugging Face answers `chat_template.jinja` with 404, 429 or 500
+- **WHEN** the template download runs
+- **THEN** the download fails with no file saved, the model still doesn't count as installed, and the next attempt downloads the template again
+
+#### Scenario: A repo lists an unsafe file name
+- **GIVEN** a repo listing contains `../x.json` or `a/../../b.jinja`
+- **WHEN** the model is downloaded
+- **THEN** those names are skipped and nothing is written outside the model's folder
+
+#### Scenario: A repo has no chat template
+- **GIVEN** the selected cleanup model's repo has no template file and its `tokenizer_config.json` has no `chat_template`
+- **WHEN** Honyaku launches and repairs the model
+- **THEN** the user sees "<Model> has no chat template, so Honyaku can't use it for cleanup. Choose another model in Settings > Models." once, and Honyaku doesn't try to download it again until the next launch
+
+#### Scenario: Dictating while the template repair runs
+- **GIVEN** the launch repair of the selected cleanup model's template is still running
+- **WHEN** the user dictates
+- **THEN** the words are pasted without cleanup and the status says "Cleanup is off until Qwen3 4B finishes downloading."
+
+#### Scenario: The model is ready right after the repair
+- **GIVEN** cleanup is on and the launch repair has just fetched the template
+- **WHEN** the repair finishes
+- **THEN** the cleanup model is loaded in the background, and the next dictation is cleaned up without a model-load delay
+

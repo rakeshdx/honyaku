@@ -119,6 +119,53 @@ final class ModelDownloaderTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: folder.appending(path: "chat_template.jinja"), encoding: .utf8), "{{ template }}")
     }
 
+    // MARK: - Error responses and file names
+
+    func testErrorResponsesLeaveNoFileAndALaterAttemptFetchesIt() async throws {
+        let model = ModelInfo(id: "status-test", type: .cleanup, engine: .mlx, displayName: "Test", hfRepoPath: "test/repo",
+                              fileNames: ["chat_template.jinja"], sizeMB: 1, tier: "test", notes: "", sha256Checksums: [:])
+        let folder = root.appending(path: "model")
+        let template = folder.appending(path: "chat_template.jinja")
+        for status in [404, 500] {
+            let downloader = ModelDownloader(session: makeMockSession(data: Data("Entry not found".utf8), statusCode: status))
+            do {
+                try await downloader.download(model: model, to: folder) { _ in }
+                XCTFail("A \(status) must fail the download")
+            } catch ModelDownloadError.downloadFailed {
+                // Expected
+            }
+            XCTAssertFalse(FileManager.default.fileExists(atPath: template.path), "A \(status) page must not be saved")
+        }
+
+        let downloader = ModelDownloader(session: makeMockSession(data: Data("{{ messages }}".utf8), statusCode: 200))
+        try await downloader.download(model: model, to: folder) { _ in }
+        XCTAssertEqual(try String(contentsOf: template, encoding: .utf8), "{{ messages }}")
+    }
+
+    func testOnlyHTTPSuccessCounts() {
+        let url = URL(string: "https://huggingface.co/x")!
+        XCTAssertTrue(ModelDownloader.isSuccess(HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)))
+        XCTAssertFalse(ModelDownloader.isSuccess(HTTPURLResponse(url: url, statusCode: 429, httpVersion: nil, headerFields: nil)))
+        XCTAssertFalse(ModelDownloader.isSuccess(URLResponse(url: url, mimeType: nil, expectedContentLength: 0, textEncodingName: nil)))
+        XCTAssertFalse(ModelDownloader.isSuccess(nil))
+    }
+
+    func testUnsafeFileNamesAreNeverDownloaded() async throws {
+        XCTAssertEqual(ModelDownloader.safeFileNames(["../x.json", "a/../../b.jinja", "/etc/x.json", "ok.json", "sub/ok.jinja"]),
+                       ["ok.json", "sub/ok.jinja"])
+
+        let model = ModelInfo(id: "names-test", type: .cleanup, engine: .mlx, displayName: "Test", hfRepoPath: "test/repo",
+                              fileNames: ["../x.json", "a/../../b.jinja", "ok.json"], sizeMB: 1, tier: "test",
+                              notes: "", sha256Checksums: [:])
+        let folder = root.appending(path: "nested/model")
+        let downloader = ModelDownloader(session: makeMockSession(data: Data("{}".utf8), statusCode: 200))
+        try await downloader.download(model: model, to: folder) { _ in }
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appending(path: "ok.json").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appending(path: "nested/x.json").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appending(path: "nested/b.jinja").path))
+    }
+
     // MARK: - Helpers
 
     private func makeMockSession(data: Data? = nil, statusCode: Int = 200, error: Error? = nil) -> URLSession {
