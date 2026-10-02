@@ -334,6 +334,13 @@ final class TranscriptionPipeline {
     private func llmStage(_ text: String, context: inout DictationContext) async -> String {
         let cleanupModel = ModelRegistry.model(
             id: defaults.string(forKey: "selectedCleanupModelID") ?? appState.selectedCleanupModelID)
+        if context.mode == .rewrite, RewritePrompt.isTooShort(text) {
+            // Too little to rewrite: a model given two words pads them with things the speaker never said.
+            // Plain dictation instead, cleanup included, since no model has run yet.
+            context.mode = .dictate
+            context.rewrite = nil
+            context.notices.append(RewriteCopy.tooShortNotice)
+        }
         if context.mode == .rewrite {
             // Without the Rewrite preparer (tests), the default template for the app the recording started in
             let plan = context.rewrite

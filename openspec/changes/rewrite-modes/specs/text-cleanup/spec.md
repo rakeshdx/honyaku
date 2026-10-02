@@ -4,7 +4,7 @@
 For a rewrite, the system SHALL send the transcript to the selected cleanup model on the device with:
 - the shared rewrite rules
 - the chosen template's prompt
-- the vocabulary terms, when there are any, as "Write these terms exactly as listed: …"
+- the vocabulary terms that occur in the dictation, when there are any, as "Write these terms exactly as listed: …" (see `fix-rewrite-grounding`)
 
 Generation SHALL use temperature 0, the template's output cap, and a 60-second timeout. The faithfulness check for word-for-word cleanup SHALL NOT be applied to rewrites.
 

@@ -89,7 +89,7 @@ The decisions behind this design were settled on 2026-10-01 (Q8–Q10, Q24, Q25,
 
 ### 4. Prompt rule
 - **When:** the list has at least one enabled term.
-- **Content:** the preparer appends "Write these terms exactly as listed: Paramount+, Pluto TV, Jira." to `context.cleanupRules`, which becomes `CleanupRequest.extraRules`. That's the top 40 enabled terms in list order.
+- **Content:** "Write these terms exactly as listed: Paramount+, Pluto TV, Jira." goes into `context.cleanupRules`, which becomes `CleanupRequest.extraRules`. Superseded by `fix-rewrite-grounding`: the correction stage adds it after the corrections, listing only the enabled terms that occur in the transcript (at most 40, in list order), because the whole list gave rewrites material to invent from.
 - **Prompt cache:** the rule changes the prompt, so the cleanup prefix cache is rebuilt when the list changes. That's fine, because edits are rare.
 - **Rewrites:** the rule is in `context.cleanupRules` for every dictation, so `rewrite-modes` adds it to every rewrite prompt by passing `context.cleanupRules` on (Q29). `VocabularyStore.promptRule` exposes the same text.
 - **Faithfulness:** the rule never relaxes the faithfulness check. It only steers the model towards the spellings already in the text.

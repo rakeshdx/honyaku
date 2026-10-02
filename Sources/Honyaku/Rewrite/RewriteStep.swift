@@ -30,12 +30,23 @@ enum RewriteStep {
                 fallBack(&context, notice: RewriteCopy.failedNotice)
                 return text
             }
+            if addsVocabularyTerms(rewrite, to: text, matcher: context.vocabularyMatcher) {
+                fallBack(&context, notice: RewriteCopy.inventedNotice)
+                return text
+            }
             return rewrite
         } catch {
             // Timeout, model not loaded, or any other error: the words as dictated, with no second model call
             fallBack(&context, notice: RewriteCopy.failedNotice)
             return text
         }
+    }
+
+    /// Whether `output` contains a vocabulary term that `input` doesn't: the model added something the
+    /// speaker never said. Without a vocabulary there's nothing to check.
+    static func addsVocabularyTerms(_ output: String, to input: String, matcher: VocabularyMatcher?) -> Bool {
+        guard let matcher else { return false }
+        return !Set(matcher.matchedTerms(in: output)).isSubset(of: matcher.matchedTerms(in: input))
     }
 
     private static func fallBack(_ context: inout DictationContext, notice: String) {

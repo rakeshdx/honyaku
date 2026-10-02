@@ -115,20 +115,13 @@ final class VocabularyStoreTests: XCTestCase {
 
     // MARK: - What the pipeline uses
 
-    func testPromptRuleListsTheTopFortyEnabledTerms() throws {
-        let store = makeStore()
-        XCTAssertNil(store.promptRule)
-        try store.add(term: "Paramount+")
-        try store.add(term: "Jira")
-        XCTAssertEqual(store.promptRule, "Write these terms exactly as listed: Paramount+, Jira.")
-
-        for index in 0..<120 { try store.add(term: "Term\(index)") }
-        let rule = try XCTUnwrap(store.promptRule)
+    func testPromptRuleListsTheGivenTermsUpToForty() {
+        XCTAssertNil(VocabularyStore.promptRule(for: []))
+        XCTAssertEqual(VocabularyStore.promptRule(for: ["Paramount+", "Jira"]),
+                       "Write these terms exactly as listed: Paramount+, Jira.")
+        let rule = VocabularyStore.promptRule(for: (0..<120).map { "Term\($0)" }) ?? ""
         XCTAssertEqual(rule.components(separatedBy: ", ").count, 40)
-        XCTAssertTrue(rule.hasSuffix("Term37."))
-
-        for term in store.terms { store.setEnabled(term.id, false) }
-        XCTAssertNil(store.promptRule, "No rule when every term is off")
+        XCTAssertTrue(rule.hasSuffix("Term39."))
     }
 
     func testMatcherFollowsEdits() throws {

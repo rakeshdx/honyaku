@@ -4,7 +4,7 @@
 Unit tests SHALL cover:
 - **Matching:** whole words, phrases across whitespace, case, punctuation next to a match, possessives, longest match, ties by list order, one pass, disabled terms, speaker labels left alone.
 - **The Whisper hint builder:** term order, the 111-token cap without cutting terms, terms only, no hint for other languages or Parakeet.
-- **The prompt rule:** present only with enabled terms, capped at 40.
+- **The prompt rule:** present only with enabled terms that occur in the transcript, capped at 40.
 - **The store:** round trip, file permissions 600, backup exclusion, corrupt-file recovery, validation, import merge and its summary.
 
 Tests SHALL use a temporary directory, and SHALL NOT read or write the user's real vocabulary, history or settings.

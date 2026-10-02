@@ -45,9 +45,11 @@ final class VocabularyStore: FeatureStore {
         return built
     }
 
-    /// "Write these terms exactly as listed: …", or nil with no enabled term.
-    var promptRule: String? {
-        let listed = enabledTerms.prefix(Self.promptRuleLimit).map(\.term)
+    /// "Write these terms exactly as listed: …" for `terms` (the ones a transcript contains, in list
+    /// order), at most `promptRuleLimit` of them; nil without terms. Never the whole list: a rewrite used
+    /// unsaid terms as material to invent from.
+    static func promptRule(for terms: [String]) -> String? {
+        let listed = terms.prefix(promptRuleLimit)
         guard !listed.isEmpty else { return nil }
         return "Write these terms exactly as listed: \(listed.joined(separator: ", "))."
     }
